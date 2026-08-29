@@ -58,12 +58,12 @@ END_MESSAGE_MAP()
 
 
 CAppLauncherDlg::CAppLauncherDlg(CWnd* pParent /*=nullptr*/)
-	: ImguiWnd(pParent)
+	: ImGuiWndBase(pParent)
 {
 	m_rcMargin = CRect(5, 60, 5 + 480 + 5, 80);
 	m_bResize = true;
 }
-BEGIN_MESSAGE_MAP(CAppLauncherDlg, ImguiWnd)
+BEGIN_MESSAGE_MAP(CAppLauncherDlg, ImGuiWndBase)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
@@ -72,13 +72,15 @@ BEGIN_MESSAGE_MAP(CAppLauncherDlg, ImguiWnd)
 //	ON_WM_SIZE()
 //	ON_WM_NCHITTEST()
 	ON_WM_WINDOWPOSCHANGED() // 主窗口位置/大小变化
-	ON_MESSAGE(MY_IMGUI_MSG, &ImguiWnd::OnImguiMsg)
+	ON_MESSAGE(MY_IMGUI_MSG, &ImGuiWndBase::OnImguiMsg)
 	ON_MESSAGE(MY_IMGUI_AFTER_CREATE, &CAppLauncherDlg::OnAfterCreate)
 	//ON_MESSAGE(WM_POPUP_ENSURE_Z, &CAppLauncherDlg::OnPopupEnsureZ)
 END_MESSAGE_MAP()
 
-void CAppLauncherDlg::ImGuiRenderFrame()
+void CAppLauncherDlg::ImGuiRender_Main()
 {
+	ImGuiWinBegin();
+
 	// 当前光标位置：标题栏+原有WindowPadding.y的位置
 	float baseY = ImGui::GetCursorPosY();
 	// 目标：距离标题栏底部100。原有padding会叠加，所以向上偏移差值
@@ -102,7 +104,7 @@ void CAppLauncherDlg::ImGuiRenderFrame()
 		bTest = true;
 		static int switchaa = 1;
 		switchaa++;
-		if(switchaa % 2 == 0)
+		if (switchaa % 2 == 0)
 			::PostMessage(GetSafeHwnd(), MY_IMGUI_MSG, BUTTON_CLICKED, 0);
 		else
 			ImGuiMsgBox_Show(ImGuiMsgBoxType::Info, u8"提示", u8"操作已完成。");
@@ -148,7 +150,12 @@ void CAppLauncherDlg::ImGuiRenderFrame()
 	// ========================================================
 	ImGui::End();
 
+	ShowWinTop();
+}
 
+
+void CAppLauncherDlg::ShowWinTop()
+{
 	//========= 1. 顶部窗口：占用顶部margin空白区域 =========
 	CRect clientRc;
 	GetClientRect(&clientRc);
@@ -169,12 +176,13 @@ void CAppLauncherDlg::ImGuiRenderFrame()
 	ImGui::Begin("TopMarginWindow", nullptr, topWndFlags);
 	{
 		// 这里写顶部区域UI，按钮、文字都可以
-		ImGui::Text("这是顶部Margin区域窗口");
-		if (ImGui::Button("顶部按钮"))
+		ImGui::Text(u8"这是顶部Margin区域窗口");
+		if (ImGui::Button(u8"顶部按钮"))
 		{
 			// do something
 		}
 	}
+	
 	ImGui::End();
 }
 
@@ -291,7 +299,7 @@ bool CAppLauncherDlg::CreatePopupOwned(int w, int h)
 }
 void CAppLauncherDlg::OnDestroy()
 {
-	ImguiWnd::OnDestroy();
+	ImGuiWndBase::OnDestroy();
 	if (m_hPopupWnd != nullptr)
 	{
 		::DestroyWindow(m_hPopupWnd);

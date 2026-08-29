@@ -5,27 +5,17 @@
 #pragma once
 
 
-#include "ImguiWnd.h"
+#include "ImGuiWndBase.h"
 #define WM_POPUP_ENSURE_Z (WM_USER + 101)
 class CAboutDlg;
 // CAppLauncherDlg 对话框
-class CAppLauncherDlg : public ImguiWnd
+class CAppLauncherDlg : public ImGuiWndBase
 {
 // 构造
 public:
 	CAppLauncherDlg(CWnd* pParent = nullptr);	// 标准构造函数
 
 	CAboutDlg* m_pDlg;
-	HWND m_HWndEdit1 = NULL;
-#if 0
-// 对话框数据
-#ifdef AFX_DESIGN_TIME
-	enum { IDD = IDD_APPLAUNCHER_DIALOG };
-#endif
-	protected:
-	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV 支持
-
-#endif
 
 // 实现
 protected:
@@ -45,9 +35,10 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 private:
-    virtual void ImGuiRenderFrame();
+    virtual void ImGuiRender_Main();
 	bool bTest = false;
 
+	void ShowWinTop();
 protected:
 	HWND        m_hPopupWnd = nullptr;
 	int         m_popupW;

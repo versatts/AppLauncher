@@ -60,16 +60,19 @@
     <ClInclude Include="C:\code\imgui\backends\imgui_impl_win32.h">
       <Filter>imgui</Filter>
     </ClInclude>
-    <ClInclude Include="ImguiPack.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="ImguiWnd.h">
+    <ClInclude Include="ImGuiPack.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="MsgBox.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="ImguiMsgBox.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGuiWndBase.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGuiWndSimple.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -104,16 +107,19 @@
     <ClCompile Include="C:\code\imgui\backends\imgui_impl_win32.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
-    <ClCompile Include="ImguiPack.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="ImguiWnd.cpp">
+    <ClCompile Include="ImGuiPack.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="MsgBox.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="ImguiMsgBox.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGuiWndBase.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGuiWndSimple.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

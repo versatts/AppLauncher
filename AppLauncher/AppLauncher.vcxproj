@@ -198,8 +198,9 @@
     <ClInclude Include="C:\code\imgui\imstb_truetype.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="ImguiMsgBox.h" />
-    <ClInclude Include="ImguiPack.h" />
-    <ClInclude Include="ImguiWnd.h" />
+    <ClInclude Include="ImGuiPack.h" />
+    <ClInclude Include="ImGuiWndBase.h" />
+    <ClInclude Include="ImGuiWndSimple.h" />
     <ClInclude Include="MsgBox.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Resource.h" />
@@ -232,8 +233,9 @@
     <ClCompile Include="ImguiMsgBox.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="ImguiPack.cpp" />
-    <ClCompile Include="ImguiWnd.cpp" />
+    <ClCompile Include="ImGuiPack.cpp" />
+    <ClCompile Include="ImGuiWndBase.cpp" />
+    <ClCompile Include="ImGuiWndSimple.cpp" />
     <ClCompile Include="MsgBox.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
