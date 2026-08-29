@@ -2,3 +2,5 @@
 *.vsidx
 *.suo
 *.user
+x64/
+AppLauncher/x64/
