@@ -16,6 +16,7 @@ public:
 	CAppLauncherDlg(CWnd* pParent = nullptr);	// 标准构造函数
 
 	CAboutDlg* m_pDlg;
+	HWND m_HWndEdit1 = NULL;
 #if 0
 // 对话框数据
 #ifdef AFX_DESIGN_TIME

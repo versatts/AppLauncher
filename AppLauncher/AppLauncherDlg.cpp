@@ -35,6 +35,8 @@ public:
 // 实现
 protected:
 	DECLARE_MESSAGE_MAP()
+public:
+	afx_msg void OnBnClickedBtnTest();
 };
 
 CAboutDlg::CAboutDlg() : CDialogEx(IDD_ABOUTBOX)
@@ -47,6 +49,7 @@ void CAboutDlg::DoDataExchange(CDataExchange* pDX)
 }
 
 BEGIN_MESSAGE_MAP(CAboutDlg, CDialogEx)
+	ON_BN_CLICKED(IDC_BTN_TEST, &CAboutDlg::OnBnClickedBtnTest)
 END_MESSAGE_MAP()
 
 
@@ -57,7 +60,7 @@ END_MESSAGE_MAP()
 CAppLauncherDlg::CAppLauncherDlg(CWnd* pParent /*=nullptr*/)
 	: ImguiWnd(pParent)
 {
-	m_rcMargin = CRect(10, 30, 10, 50);
+	m_rcMargin = CRect(5, 60, 5 + 480 + 5, 80);
 	m_bResize = true;
 }
 BEGIN_MESSAGE_MAP(CAppLauncherDlg, ImguiWnd)
@@ -85,14 +88,12 @@ void CAppLauncherDlg::ImGuiRenderFrame()
 	static float f = 0.0f;
 	ImGui::Text(u8"拖动本窗口标题栏 → MFC对话框整体移动 %.2f", f);
 	ImGui::SliderFloat(u8"滑动条", &f, 0.0f, 1.0f);
+	CString ss; ss.Format(_T("%.3f"), f);
 	if (ImGui::IsItemDeactivatedAfterEdit())//紧跟SliderFloat
 	{
 		//编辑完成，在这里给MFC发消息
-		LPARAM l;
-		memcpy(&l, &f, 4);
-		::PostMessage(GetSafeHwnd(), MY_IMGUI_MSG, SLIDER_CHANGED, l);
+		m_pDlg->GetDlgItem(IDC_EDIT1)->SetWindowText(ss);
 	}
-	CString ss; ss.Format(_T("%.3f"), f);
 	ImGui::SameLine(0, 14);
 	ImGui::Text(ss.GetBuffer());
 
@@ -145,6 +146,36 @@ void CAppLauncherDlg::ImGuiRenderFrame()
 		// 用户点了确定，MFC场景建议PostMessage，不要在这里做阻塞操作
 	}
 	// ========================================================
+	ImGui::End();
+
+
+	//========= 1. 顶部窗口：占用顶部margin空白区域 =========
+	CRect clientRc;
+	GetClientRect(&clientRc);
+	float clientW = (float)clientRc.Width();
+	float clientH = (float)clientRc.Height(); 
+	
+	ImGui::SetNextWindowPos(ImVec2(5.0f, 5.0f), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2((float)clientW - 10, (float)m_rcMargin.top - 2 - 5), ImGuiCond_Always);
+
+	// 去掉标题栏、边框、拖拽、缩放，纯容器
+	ImGuiWindowFlags topWndFlags =
+		ImGuiWindowFlags_NoDecoration
+		| ImGuiWindowFlags_NoMove
+		| ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoScrollbar
+		| ImGuiWindowFlags_NoScrollWithMouse;
+
+	ImGui::Begin("TopMarginWindow", nullptr, topWndFlags);
+	{
+		// 这里写顶部区域UI，按钮、文字都可以
+		ImGui::Text("这是顶部Margin区域窗口");
+		if (ImGui::Button("顶部按钮"))
+		{
+			// do something
+		}
+	}
+	ImGui::End();
 }
 
 LRESULT CAppLauncherDlg::OnAfterCreate(WPARAM wparam, LPARAM lparam)
@@ -267,34 +298,7 @@ void CAppLauncherDlg::OnDestroy()
 		m_hPopupWnd = nullptr;
 	}
 }
-#if 0
-LRESULT CAppLauncherDlg::OnPopupEnsureZ(WPARAM wParam, LPARAM lParam)
-{
-	m_bNeedRaisePopup = false;
-	if (!m_hPopupWnd || !::IsWindow(m_hPopupWnd))
-		return 0;
 
-	// 判断：Popup的Z序前一个窗口是不是主窗口m_hWnd
-	HWND hPrev = ::GetWindow(m_hPopupWnd, GW_HWNDPREV);
-	if (hPrev != m_hWnd)
-	{
-		// 把Popup放到主窗口的Z序之上，SWP_NOACTIVATE，绝不改变焦点状态
-		::SetWindowPos(m_hPopupWnd, m_hWnd,// HWND_TOPMOST,
-			0, 0, 0, 0,
-			SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-	}
-
-	CRect rcCur;
-	GetWindowRect(&rcCur);
-	// 判断：主窗口位置/大小是否发生改变
-	if (rcCur != m_lastMainWndRect)
-	{
-		m_lastMainWndRect = rcCur;
-		SyncPopupCorner();
-	}
-	return 0;
-}
-#endif
 void CAppLauncherDlg::SyncPopupCorner()
 {
 	if (!m_hPopupWnd)
@@ -303,8 +307,8 @@ void CAppLauncherDlg::SyncPopupCorner()
 	CRect rcMainScreen;
 	GetWindowRect(&rcMainScreen);
 
-	int x = 460;// rcMainScreen.right - m_popupW - 10;
-	int y = 70;// rcMainScreen.top + 80;
+	int x = 475;// rcMainScreen.right - m_popupW - 10;
+	int y = 60 + 2;// rcMainScreen.top + 80;
 
 	::MoveWindow(m_hPopupWnd, x, y, m_popupW, m_popupH, TRUE);
 #if 0
@@ -313,4 +317,12 @@ void CAppLauncherDlg::SyncPopupCorner()
 		m_popupW, m_popupH,
 		SWP_NOACTIVATE);
 #endif
+}
+
+
+void CAboutDlg::OnBnClickedBtnTest()
+{
+	// TODO: 在此添加控件通知处理程序代码
+
+	//AfxMessageBox(_T("TEST clicked."));
 }
