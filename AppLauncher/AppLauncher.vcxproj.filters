@@ -36,23 +36,41 @@
     <ClInclude Include="pch.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\..\code\imgui\imconfig.h">
+    <ClInclude Include="C:\code\imgui\imconfig.h">
       <Filter>imgui</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\..\code\imgui\imgui.h">
+    <ClInclude Include="C:\code\imgui\imgui.h">
       <Filter>imgui</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\..\code\imgui\imgui_internal.h">
+    <ClInclude Include="C:\code\imgui\imgui_internal.h">
       <Filter>imgui</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\..\code\imgui\imstb_rectpack.h">
+    <ClInclude Include="C:\code\imgui\imstb_rectpack.h">
       <Filter>imgui</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\..\code\imgui\imstb_textedit.h">
+    <ClInclude Include="C:\code\imgui\imstb_textedit.h">
       <Filter>imgui</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\..\code\imgui\imstb_truetype.h">
+    <ClInclude Include="C:\code\imgui\imstb_truetype.h">
       <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\code\imgui\backends\imgui_impl_dx11.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\code\imgui\backends\imgui_impl_win32.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiPack.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiWnd.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="MsgBox.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ImguiMsgBox.h">
+      <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -65,26 +83,38 @@
     <ClCompile Include="pch.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\..\code\imgui\imgui.cpp">
+    <ClCompile Include="C:\code\imgui\imgui.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\..\code\imgui\imgui_demo.cpp">
+    <ClCompile Include="C:\code\imgui\imgui_demo.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\..\code\imgui\imgui_draw.cpp">
+    <ClCompile Include="C:\code\imgui\imgui_draw.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\..\code\imgui\imgui_tables.cpp">
+    <ClCompile Include="C:\code\imgui\imgui_tables.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\..\code\imgui\imgui_widgets.cpp">
+    <ClCompile Include="C:\code\imgui\imgui_widgets.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\..\code\imgui\backends\imgui_impl_dx11.cpp">
+    <ClCompile Include="C:\code\imgui\backends\imgui_impl_dx11.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\..\code\imgui\backends\imgui_impl_win32.cpp">
+    <ClCompile Include="C:\code\imgui\backends\imgui_impl_win32.cpp">
       <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="ImguiPack.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ImguiWnd.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="MsgBox.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ImguiMsgBox.cpp">
+      <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -103,7 +133,7 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="..\..\..\..\..\..\code\imgui\LICENSE.txt">
+    <Text Include="C:\code\imgui\LICENSE.txt">
       <Filter>imgui</Filter>
     </Text>
   </ItemGroup>

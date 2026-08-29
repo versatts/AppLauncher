@@ -6,12 +6,15 @@
 #include "framework.h"
 #include "AppLauncher.h"
 #include "AppLauncherDlg.h"
+#include "ImguiPack.h"
+
+#include "MsgBox.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
-
+ImguiPack g_GUI;
 // CAppLauncherApp
 
 BEGIN_MESSAGE_MAP(CAppLauncherApp, CWinApp)
@@ -37,6 +40,8 @@ CAppLauncherApp theApp;
 
 BOOL CAppLauncherApp::InitInstance()
 {
+	HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
 	CWinApp::InitInstance();
 
 
@@ -56,9 +61,22 @@ BOOL CAppLauncherApp::InitInstance()
 	// 例如修改为公司或组织名
 	SetRegistryKey(_T("应用程序向导生成的本地应用程序"));
 
+	LPCWSTR aaa = L"L:\\work\\MyCode\\AppLauncher\\a.png";
+	g_GUI.LoadPngToSRV(AfxGetInstanceHandle(), aaa, &(g_GUI.m_srvInfo));
+#if 0
+	MsgBox* pMsgBox = new MsgBox(nullptr);
+//	pMsgBox->m_rcWnd = CRect(300, 300, 800, 600);
+	int nRet = pMsgBox->DoModal(false);
+//	delete pMsgBox;
+
+	Sleep(3000);
+	pMsgBox->UnInit();
+
+#endif
 	CAppLauncherDlg dlg;
 	m_pMainWnd = &dlg;
-	INT_PTR nResponse = dlg.DoModal();
+	CRect rc(0, 0, 960, 600);
+	INT_PTR nResponse = dlg.DoModal(true, &rc);
 	if (nResponse == IDOK)
 	{
 		// TODO: 在此放置处理何时用
@@ -71,9 +89,11 @@ BOOL CAppLauncherApp::InitInstance()
 	}
 	else if (nResponse == -1)
 	{
+		DWORD dwErr = GetLastError(); // 看错误码
 		TRACE(traceAppMsg, 0, "警告: 对话框创建失败，应用程序将意外终止。\n");
 		TRACE(traceAppMsg, 0, "警告: 如果您在对话框上使用 MFC 控件，则无法 #define _AFX_NO_MFC_CONTROLS_IN_DIALOGS。\n");
 	}
+
 
 	// 删除上面创建的 shell 管理器。
 	if (pShellManager != nullptr)
