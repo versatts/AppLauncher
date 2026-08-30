@@ -39,6 +39,8 @@ private:
 	bool bTest = false;
 
 	void ShowWinTop();
+	void ShowWinBottom();
+	void ShowWinAcqCtrl();
 protected:
 	HWND        m_hPopupWnd = nullptr;
 	int         m_popupW;

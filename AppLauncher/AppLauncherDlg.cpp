@@ -9,13 +9,14 @@
 #include "afxdialogex.h"
 #include "MsgBox.h"
 #include "ImguiMsgBox.h"
+#include "ImGuiPack.h"
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
 // ImGui Win32 外部声明
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
+extern ImguiPack g_GUI;
 #define WM_IMGUI_RENDER (WM_USER + 1001)
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -55,12 +56,24 @@ END_MESSAGE_MAP()
 
 // CAppLauncherDlg 对话框
 
+#define APP_TOP 60
+#define APP_BOTTOM 80
+#define APP_PART_DIST 2
+
+#define APP_W 960
+#define APP_H 600
+#define APP_CM 5 //client margin
+#define ACQ_LEFT_W 400
+#define ACQ_LEFT_H (APP_H - APP_CM * 2 - APP_TOP - APP_BOTTOM)
+
+#define ACQ_RIGHT_W (APP_W - ACQ_LEFT_W - APP_CM * 3)
+#define ACQ_RIGHT_H 300
 
 
 CAppLauncherDlg::CAppLauncherDlg(CWnd* pParent /*=nullptr*/)
 	: ImGuiWndBase(pParent)
 {
-	m_rcMargin = CRect(5, 60, 5 + 480 + 5, 80);
+	m_rcMargin = CRect(APP_CM, APP_CM + APP_TOP + APP_PART_DIST, ACQ_RIGHT_W + APP_CM * 2, APP_PART_DIST + APP_BOTTOM + APP_CM);
 	m_bResize = true;
 }
 BEGIN_MESSAGE_MAP(CAppLauncherDlg, ImGuiWndBase)
@@ -74,7 +87,6 @@ BEGIN_MESSAGE_MAP(CAppLauncherDlg, ImGuiWndBase)
 	ON_WM_WINDOWPOSCHANGED() // 主窗口位置/大小变化
 	ON_MESSAGE(MY_IMGUI_MSG, &ImGuiWndBase::OnImguiMsg)
 	ON_MESSAGE(MY_IMGUI_AFTER_CREATE, &CAppLauncherDlg::OnAfterCreate)
-	//ON_MESSAGE(WM_POPUP_ENSURE_Z, &CAppLauncherDlg::OnPopupEnsureZ)
 END_MESSAGE_MAP()
 
 void CAppLauncherDlg::ImGuiRender_Main()
@@ -102,8 +114,8 @@ void CAppLauncherDlg::ImGuiRender_Main()
 	if (ImGui::Button("MFC+ImGui Test Button"))
 	{
 		bTest = true;
-		static int switchaa = 1;
-		switchaa++;
+		static int switchaa = 2;
+		//switchaa++;
 		if (switchaa % 2 == 0)
 			::PostMessage(GetSafeHwnd(), MY_IMGUI_MSG, BUTTON_CLICKED, 0);
 		else
@@ -123,7 +135,8 @@ void CAppLauncherDlg::ImGuiRender_Main()
 	}
 	ImGui::Text(m_bufEdit);
 
-	ImGui::ShowMetricsWindow();
+//	ImGui::ShowMetricsWindow();
+
 
 
 	if (m_hPopupWnd != nullptr && !m_bNeedRaisePopup)
@@ -151,19 +164,42 @@ void CAppLauncherDlg::ImGuiRender_Main()
 	ImGui::End();
 
 	ShowWinTop();
+	ShowWinBottom();
+	ShowWinAcqCtrl();
 }
 
+void CAppLauncherDlg::ShowWinAcqCtrl()
+{
+	//========= 1. 顶部窗口：占用顶部margin空白区域 =========
+
+	ImGui::SetNextWindowPos(ImVec2(APP_CM + ACQ_LEFT_W, APP_CM + APP_TOP + APP_PART_DIST + ACQ_RIGHT_H + APP_PART_DIST), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2((float)m_clientW - (APP_CM * 2 + ACQ_LEFT_W), 
+		APP_H - (APP_CM * 2 + APP_PART_DIST * 3 + ACQ_RIGHT_H + APP_TOP + APP_BOTTOM))
+		, ImGuiCond_Always);
+
+	// 去掉标题栏、边框、拖拽、缩放，纯容器
+	ImGuiWindowFlags topWndFlags =
+		ImGuiWindowFlags_NoDecoration
+		| ImGuiWindowFlags_NoMove
+		| ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoScrollbar
+		| ImGuiWindowFlags_NoScrollWithMouse;
+
+	ImGui::Begin("AcqCtrlPanel", nullptr, topWndFlags);
+	{
+		// 这里写顶部区域UI，按钮、文字都可以
+		ImGui::Text(u8"This is AcqCtrlPanel");
+	}
+
+	ImGui::End();
+}
 
 void CAppLauncherDlg::ShowWinTop()
 {
 	//========= 1. 顶部窗口：占用顶部margin空白区域 =========
-	CRect clientRc;
-	GetClientRect(&clientRc);
-	float clientW = (float)clientRc.Width();
-	float clientH = (float)clientRc.Height(); 
 	
-	ImGui::SetNextWindowPos(ImVec2(5.0f, 5.0f), ImGuiCond_Always);
-	ImGui::SetNextWindowSize(ImVec2((float)clientW - 10, (float)m_rcMargin.top - 2 - 5), ImGuiCond_Always);
+	ImGui::SetNextWindowPos(ImVec2(APP_CM, APP_CM), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2((float)m_clientW - APP_CM * 2, APP_TOP), ImGuiCond_Always);
 
 	// 去掉标题栏、边框、拖拽、缩放，纯容器
 	ImGuiWindowFlags topWndFlags =
@@ -186,9 +222,42 @@ void CAppLauncherDlg::ShowWinTop()
 	ImGui::End();
 }
 
+void CAppLauncherDlg::ShowWinBottom()
+{
+	//========= 1. 顶部窗口：占用顶部margin空白区域 =========
+
+	ImGui::SetNextWindowPos(ImVec2(APP_CM, APP_H - APP_BOTTOM - APP_CM), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2((float)m_clientW - APP_CM * 2, APP_BOTTOM), ImGuiCond_Always);
+
+	// 去掉标题栏、边框、拖拽、缩放，纯容器
+	ImGuiWindowFlags topWndFlags =
+		ImGuiWindowFlags_NoDecoration
+		| ImGuiWindowFlags_NoMove
+		| ImGuiWindowFlags_NoResize
+		| ImGuiWindowFlags_NoScrollbar
+		| ImGuiWindowFlags_NoScrollWithMouse;
+
+	ImGui::Begin("BottomMarginWindow", nullptr, topWndFlags);
+	{
+		// 这里写顶部区域UI，按钮、文字都可以
+		ImGui::Text(u8"这是底部Margin区域窗口");
+		ImTextureID texId = (ImTextureID)g_GUI.m_srvInfo;
+		ImGui::Image(texId, ImVec2(48, 48));
+		ImGui::SameLine(80);
+		ImVec2 btnSize = ImVec2(32, 32);
+		if (ImGui::ImageButton(u8"按钮", texId, btnSize))
+		{
+		}
+		ImGui::SameLine(160);
+		ImGui::ImageButton(u8"123", texId, ImVec2(32, 32),
+			ImVec2(0.2, 0.2), ImVec2(0.8, 0.8));
+	}
+
+	ImGui::End();
+}
 LRESULT CAppLauncherDlg::OnAfterCreate(WPARAM wparam, LPARAM lparam)
 {
-	CreatePopupOwned(480, 300);
+	CreatePopupOwned(ACQ_RIGHT_W, ACQ_RIGHT_H);
 
 	m_pDlg = new CAboutDlg;
 	m_pDlg->Create(IDD_ABOUTBOX, CWnd::FromHandle(m_hPopupWnd));
@@ -231,7 +300,7 @@ LRESULT CAppLauncherDlg::OnImguiMsg(WPARAM wparam, LPARAM lparam)
 		int nRet = pMsgBox->DoModal();
 		delete pMsgBox;
 		CString s; s.Format(_T("Button [%d] clicked"), nRet);
-		AfxMessageBox(s);
+		m_pDlg->GetDlgItem(IDC_EDIT1)->SetWindowText(s);
 #endif
 		break;
 	}
@@ -315,8 +384,8 @@ void CAppLauncherDlg::SyncPopupCorner()
 	CRect rcMainScreen;
 	GetWindowRect(&rcMainScreen);
 
-	int x = 475;// rcMainScreen.right - m_popupW - 10;
-	int y = 60 + 2;// rcMainScreen.top + 80;
+	int x = APP_CM + ACQ_LEFT_W + APP_CM;
+	int y = APP_CM + APP_TOP + 2;
 
 	::MoveWindow(m_hPopupWnd, x, y, m_popupW, m_popupH, TRUE);
 #if 0

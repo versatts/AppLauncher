@@ -19,7 +19,7 @@ ImguiPack::ImguiPack()
 	// 加载微软雅黑，字号17，中文完整字符集
 	ImFont* fontYaHei = io.Fonts->AddFontFromFileTTF(
 		"C:\\Windows\\Fonts\\msyh.ttc",
-		27.0f,
+		17.0f,
 		&cfg,
 		io.Fonts->GetGlyphRangesChineseFull()
 	);
@@ -83,6 +83,10 @@ ImguiPack::ImguiPack()
 ImguiPack::~ImguiPack()
 {
 	ReleaseD3D11Resources();
+	if (m_srvInfo)
+	{
+		m_srvInfo->Release();
+	}
 }
 void ImguiPack::CreateD3D11Resources()
 {

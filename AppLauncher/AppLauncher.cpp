@@ -35,7 +35,36 @@ CAppLauncherApp::CAppLauncherApp()
 
 CAppLauncherApp theApp;
 
+CString GetExeRunDir()
+{
+	TCHAR szPath[MAX_PATH] = { 0 };
+	::GetModuleFileName(NULL, szPath, MAX_PATH);
 
+	CString strPath(szPath);
+	// 去掉exe文件名，得到目录
+	int nPos = strPath.ReverseFind(_T('\\'));
+	if (nPos != -1)
+	{
+		strPath = strPath.Left(nPos);
+	}
+	return strPath;
+}
+
+// char*(GBK) 转 wchar_t*
+wchar_t* CharToWchar(const char* pSrc)
+{
+	if (pSrc == nullptr) return nullptr;
+
+	// 第一步：计算需要多少wchar_t缓冲区
+	int nWcharLen = MultiByteToWideChar(CP_ACP, 0, pSrc, -1, nullptr, 0);
+	if (nWcharLen <= 0)
+		return nullptr;
+
+	wchar_t* pWBuf = new wchar_t[nWcharLen];
+	MultiByteToWideChar(CP_ACP, 0, pSrc, -1, pWBuf, nWcharLen);
+
+	return pWBuf;
+}
 // CAppLauncherApp 初始化
 
 BOOL CAppLauncherApp::InitInstance()
@@ -61,8 +90,11 @@ BOOL CAppLauncherApp::InitInstance()
 	// 例如修改为公司或组织名
 	SetRegistryKey(_T("应用程序向导生成的本地应用程序"));
 
-	LPCWSTR aaa = L"L:\\work\\MyCode\\AppLauncher\\a.png";
+	CString sDir = GetExeRunDir() + "\\a.png";
+	wchar_t* p = CharToWchar(sDir.GetBuffer());
+	LPCWSTR aaa = p;
 	g_GUI.LoadPngToSRV(AfxGetInstanceHandle(), aaa, &(g_GUI.m_srvInfo));
+	delete p;
 #if 0
 	MsgBox* pMsgBox = new MsgBox(nullptr);
 //	pMsgBox->m_rcWnd = CRect(300, 300, 800, 600);
