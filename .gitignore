@@ -4,3 +4,12 @@
 *.user
 x64/
 AppLauncher/x64/
+/MyDemo/example_win32_directx11/Debug/example_.9F316E83.tlog/*.tlog
+/MyDemo/example_win32_directx11/Debug/example_.9F316E83.tlog/*.lastbuildstate
+/MyDemo/example_win32_directx11/Debug/*.recipe
+/MyDemo/example_win32_directx11/Debug/*.ilk
+/MyDemo/example_win32_directx11/Debug/*.log
+/MyDemo/example_win32_directx11/Debug/*.obj
+/MyDemo/example_win32_directx11/Debug/*.idb
+/MyDemo/example_win32_directx11/Debug/*.pdb
+/MyDemo/example_win32_directx11/*.ini
