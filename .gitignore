@@ -13,3 +13,12 @@ AppLauncher/x64/
 /MyDemo/example_win32_directx11/Debug/*.idb
 /MyDemo/example_win32_directx11/Debug/*.pdb
 /MyDemo/example_win32_directx11/*.ini
+/MyDemo/DesktopAppBox/Debug/*.log
+/MyDemo/DesktopAppBox/Debug/*.recipe
+/MyDemo/DesktopAppBox/Debug/*.ilk
+/MyDemo/DesktopAppBox/Debug/DesktopAppBox.tlog/*.tlog
+/MyDemo/DesktopAppBox/Debug/DesktopAppBox.tlog/*.lastbuildstate
+/MyDemo/DesktopAppBox/Debug/*.obj
+/MyDemo/DesktopAppBox/Debug/*.idb
+/MyDemo/DesktopAppBox/Debug/*.pdb
+/MyDemo/DesktopAppBox/*.ini
