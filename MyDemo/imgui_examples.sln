@@ -1,13 +1,15 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.34112.143
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34701.34
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "example_win32_directx11", "example_win32_directx11\example_win32_directx11.vcxproj", "{9F316E83-5AE5-4939-A723-305A94F48005}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TestDialog", "TestDialog\TestDialog.vcxproj", "{6B07B8DE-47FC-4CC4-B97A-93CE18547C89}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ImGuiStatic", "ImGuiStatic\ImGuiStatic.vcxproj", "{7604113A-AB6D-41EF-8B72-AB6240A1F23C}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DesktopAppBox", "DesktopAppBox\DesktopAppBox.vcxproj", "{26367610-2EFF-4A52-AAC6-28CCDCF05F40}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -41,6 +43,14 @@ Global
 		{7604113A-AB6D-41EF-8B72-AB6240A1F23C}.Release|Win32.Build.0 = Release|Win32
 		{7604113A-AB6D-41EF-8B72-AB6240A1F23C}.Release|x64.ActiveCfg = Release|x64
 		{7604113A-AB6D-41EF-8B72-AB6240A1F23C}.Release|x64.Build.0 = Release|x64
+		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Debug|Win32.ActiveCfg = Debug|Win32
+		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Debug|Win32.Build.0 = Debug|Win32
+		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Debug|x64.ActiveCfg = Debug|x64
+		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Debug|x64.Build.0 = Debug|x64
+		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Release|Win32.ActiveCfg = Release|Win32
+		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Release|Win32.Build.0 = Release|Win32
+		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Release|x64.ActiveCfg = Release|x64
+		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
