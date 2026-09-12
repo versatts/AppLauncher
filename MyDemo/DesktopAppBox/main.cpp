@@ -141,6 +141,22 @@ void MakeOneFolder(std::vector<std::wstring>& lnkList, ST_FOLDER& folder)
         }
     }
 }
+
+// 專門用來尋找桌面壁紙夾層的回呼函式
+BOOL CALLBACK EnumWallpaperWindowsProc(HWND hwnd, LPARAM lParam)
+{
+    // 檢查這個視窗內部是否包含桌面圖標層 "SHELLDLL_DefView"
+    HWND hShellView = ::FindWindowExW(hwnd, NULL, L"SHELLDLL_DefView", NULL);
+    if (hShellView != NULL)
+    {
+        // 💡 找到了！在 Windows 架構中，真正拿來當桌布背景、且絕對不擋圖標的，
+        // 就是緊跟在這個包含圖標層的視窗「後方」的下一個同級 "WorkerW" 視窗
+        HWND* pResultHwnd = (HWND*)lParam;
+        *pResultHwnd = ::FindWindowExW(NULL, hwnd, L"WorkerW", NULL);
+        return FALSE; // 找到了就停止列舉，立刻退出
+    }
+    return TRUE; // 沒找到就繼續找下一個視窗
+}
 // Main code
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -160,8 +176,99 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // Create application window
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui-001", nullptr };
     ::RegisterClassExW(&wc);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"", WS_POPUP | /*WS_OVERLAPPEDWINDOW | */WS_CLIPCHILDREN
+#define NEW_PLAN 1
+#if NEW_PLAN
+    // ==================== 🚀 終極壁紙相容方案：可交互、不擋圖標版 ====================
+     // 💡 核心修復一：移除 WS_EX_TRANSPARENT（滑鼠穿透），這樣按鈕和 Tab 就能正常點擊交互了！
+     // 💡 核心修復二：保留 WS_EX_LAYERED 確保視窗跨越系統純色裁剪優化，100% 正常繪製
+    HWND hwnd = ::CreateWindowExW(
+        WS_EX_LAYERED,                      // 擴展樣式：僅保留層級，移除穿透
+        wc.lpszClassName,
+        L"-AppBox-",                         // 標題字串
+        WS_POPUP | WS_CLIPCHILDREN,          // 標準彈出式（保持頂層身份，D3D才能穩定Present）
+        (cx - g_WinW) / 2,
+        (cy - g_WinH) / 2,
+        (int)(g_WinW * main_scale),
+        (int)(g_WinH * main_scale),
+        nullptr, nullptr, wc.hInstance, nullptr
+    );
+
+    // 設定層級視窗的混色模式（不修改原本的透明度，但激發 Layered 獨立渲染鏈）
+    ::SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+
+    // 尋找 Progman 桌面管理器
+    HWND hProgman = ::FindWindowW(L"Progman", L"Program Manager");
+    if (hProgman)
+    {
+        // 💡 核心魔法：我們不呼叫 SetParent (會被裁剪隱形)，而是透過 SetWindowLongPtrW 
+        // 將系統的 Progman 指定為我們視窗的 Owner（所有者）視窗！
+        // 這樣可以讓視窗在邏輯層級上永久隸屬於桌面，同時保持獨立的渲染表面，不被純色優化給裁剪。
+        ::SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, (LONG_PTR)hProgman);
+    }
+
+    // 初始將視窗推至最底部（與壁紙同高，絕對不遮擋桌面圖標）
+    ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    // ============================================================================
+#else
+ HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"", WS_POPUP | /*WS_OVERLAPPEDWINDOW | */WS_CLIPCHILDREN
         , (cx - g_WinW) / 2, (cy - g_WinH) / 2, (int)(g_WinW * main_scale), (int)(g_WinH * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
+
+#endif
+#define ENABLE_VIEWPORTS 1
+
+#if 0
+    // ==================== 🚀 終極壁紙嵌入：EnumWindows 萬能相容版 ====================
+       // 第一步：發送 0x052C 神秘訊息，強迫系統生成桌布層
+    HWND hProgman = ::FindWindowW(L"Progman", L"Program Manager");
+    if (hProgman)
+    {
+        ::SendMessageTimeoutW(hProgman, 0x052C, 0, 0, SMTO_NORMAL, 1000, NULL);
+    }
+
+    // 第二步：呼叫萬能的 EnumWindows 進行全域視窗列舉，精確捕捉目標
+    HWND hWallpaperTargetW = NULL;
+    ::EnumWindows(EnumWallpaperWindowsProc, (LPARAM)&hWallpaperTargetW);
+
+    // 第三步：【純色桌面特有降級防禦】
+    // 如果 Enum 完發現 hWallpaperTargetW 依舊為空，說明系統在純色模式下把所有東西都壓在 Progman 裡
+    // 此時我們就直接將父視窗指定為 hProgman 即可
+    if (!hWallpaperTargetW)
+    {
+        hWallpaperTargetW = hProgman;
+    }
+
+    // 第四步：執行安全的子視窗化轉換與座標對齊
+    if (hWallpaperTargetW)
+    {
+        // 賦予合法的子視窗 Control ID（徹底防止 Windows 阻斷繪製訊息）
+        ::SetWindowLongPtrW(hwnd, GWLP_ID, (LONG_PTR)1001);
+
+        // 轉換樣式為合法的子視窗
+        DWORD style = ::GetWindowLongW(hwnd, GWL_STYLE);
+        style &= ~WS_POPUP;
+        style |= WS_CHILD;
+        ::SetWindowLongW(hwnd, GWL_STYLE, style);
+
+        // 💥 將您的視窗強行塞入我們定位出來的萬能壁紙容器中
+        ::SetParent(hwnd, hWallpaperTargetW);
+
+        // 重新對齊物理寬高與相對坐標
+        int targetW = (int)(g_WinW * main_scale);
+        int targetH = (int)(g_WinH * main_scale);
+        int targetX = (cx - targetW) / 2;
+        int targetY = (cy - targetH) / 2;
+
+        ::MoveWindow(hwnd, targetX, targetY, targetW, targetH, TRUE);
+
+        // 💡 如果最終去到了 Progman，需要強制下一筆 HWND_BOTTOM 確保不擋圖標
+        if (hWallpaperTargetW == hProgman)
+        {
+            ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    }
+    // ============================================================================
+
+#endif
 
     // Initialize Direct3D
     if (!CreateDeviceD3D(hwnd))
@@ -182,8 +289,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
+#if ENABLE_VIEWPORTS
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
-    
+#endif 
     //io.ConfigViewportsNoAutoMerge = true;
     //io.ConfigViewportsNoTaskBarIcon = true;
     //io.ConfigDockingAlwaysTabBar = true;
@@ -366,7 +474,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             ImGuiWindowFlags win_flags = 0;
             //win_flags |= ImGuiWindowFlags_NoMove;         // ❌禁止拖动移动
             win_flags |= ImGuiWindowFlags_NoResize;       // ❌禁止缩放大小
-            win_flags |= ImGuiWindowFlags_NoCollapse;     // ❌禁止折叠（去掉右上角最小化按钮）
+           // win_flags |= ImGuiWindowFlags_NoCollapse;     // ❌禁止折叠（去掉右上角最小化按钮）
             // win_flags |= ImGuiWindowFlags_NoTitleBar;    // 可选：要不要标题栏；如果要保留标题栏就不要这个flag
             win_flags |= ImGuiWindowFlags_NoDocking;
 
@@ -468,6 +576,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clear_color_with_alpha);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
+#if ENABLE_VIEWPORTS
         // Update and Render additional Platform Windows
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
         {
@@ -496,6 +605,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 );
             }
         }
+#endif
 
         // Present
         HRESULT hr = g_pSwapChain->Present(1, 0);   // Present with vsync
@@ -610,6 +720,21 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg)
     {
+#if NEW_PLAN
+        // ==================== 🚀 終極釘死最底層防禦機制（不擋圖標） ====================
+    case WM_WINDOWPOSCHANGING:
+    {
+        WINDOWPOS* wp = (WINDOWPOS*)lParam;
+
+        // 💡 核心魔法：無論是誰（包含 ImGui 點擊、視窗聚焦）試圖把這個視窗提到最前，
+        // 我們都強制將它的插入順序（InsertAfter）覆寫為 HWND_BOTTOM。
+        // 這能確保它在外觀上與行為上，在點擊發生的同時，永遠死死地躺在桌面圖標的下方！
+        wp->hwndInsertAfter = HWND_BOTTOM;
+        wp->flags &= ~SWP_NOZORDER; // 確保 Z-Order 改變被強制執行
+        break;
+    }
+    // ===============================================================================
+#endif
     case WM_NCHITTEST:
     {
         // 获取屏幕坐标
@@ -622,7 +747,6 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         bool bCaption = false;
         if (pWin) 
         {
-            pWin->TitleBarRect().Contains(imgPt);
             ImRect a = pWin->TitleBarRect();
             float h = a.GetHeight();
             a.Min.x += h;
