@@ -15,6 +15,7 @@
 
 #include "link.h"
 #include "ResLoader.h"
+#include "TabHead.h"
 #include <vector>
 #include <algorithm>
 
@@ -52,12 +53,74 @@ LRESULT CALLBACK SecondWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 HWND gHwnd;
 int g_WinW = 600;
 int g_WinH = 400;
+
 struct ST_APP
 {
     ID3D11ShaderResourceView* iconSrv;
     WCHAR exePathBuf[MAX_PATH] = { 0 };
 };
-std::vector<ST_APP> gvApp;
+
+struct ST_FOLDER
+{
+    std::vector<ST_APP> vApp;
+    std::wstring sName;
+};
+
+std::vector<ST_FOLDER> gvFolder;
+std::vector<ST_APP>* gpvApp = nullptr;
+int gCurTab = 0;
+std::vector<std::wstring> gvFolderName;
+TabHead gTab0;
+
+void MakeOneFolder(std::vector<std::wstring>& lnkList, ST_FOLDER& folder)
+{
+    for (const auto& path : lnkList)
+    {
+        ST_APP item;
+        bool resolved = false;
+        WCHAR iconPath[MAX_PATH] = { 0 };
+
+        // 判斷是否為 Steam 的 .url 快捷方式
+        if (path.size() > 4 && _wcsicmp(path.c_str() + path.size() - 4, L".url") == 0)
+        {
+            // 解析 URL 機制
+            if (ResolveUrlTarget(path.c_str(), item.exePathBuf, MAX_PATH, iconPath, MAX_PATH))
+            {
+                resolved = true;
+            }
+        }
+        else
+        {
+            // 原有的 .lnk 解析機制
+            if (ResolveLnkTarget(path.c_str(), item.exePathBuf, MAX_PATH))
+            {
+                // 標準 exe 的圖標路徑就是它自己
+                wcsncpy_s(iconPath, item.exePathBuf, MAX_PATH);
+                resolved = true;
+            }
+        }
+
+        if (resolved)
+        {
+            UINT w, h;
+            // 💡 傳入 iconPath（如果是 Steam 會是快取的 .ico，如果是普通 EXE 會是 exe 自己的路徑）
+            item.iconSrv = LoadHighestResIconSRV(g_pd3dDevice, iconPath, w, h);
+
+            // 如果從指定路徑載入高清資源失敗（例如某些特殊 URL 快捷方式沒快取圖標）
+            if (!item.iconSrv)
+            {
+                // 降級備用方案：使用傳統的系統圖標提取
+                HICON hIco = ExtractExeMainIcon(iconPath);
+                if (hIco) {
+                    int sw = 0, sh = 0;
+                    item.iconSrv = IconToD3D11SRV_Simple(g_pd3dDevice, hIco, sw, sh);
+                    DestroyIcon(hIco);
+                }
+            }
+            folder.vApp.push_back(item);
+        }
+    }
+}
 // Main code
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -128,7 +191,30 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
-    auto lnkList = EnumLnkFilesInAppDir();
+    std::wstring sDir;
+    std::vector<std::wstring> vFolder;
+    auto lnkList = EnumLnkFilesInAppDir(sDir, vFolder);
+
+    ST_FOLDER folder0;
+    folder0.sName = _T("Useful");
+    MakeOneFolder(lnkList, folder0);
+    gvFolder.push_back(folder0);
+    gvFolderName.push_back(folder0.sName);
+    gpvApp = &(gvFolder[0].vApp);
+    gTab0.selectedTabIdx = &gCurTab;
+    gTab0.folders = &gvFolderName;
+
+    for (auto fx : vFolder)
+    {
+        ST_FOLDER folderx;
+        folderx.sName = fx;
+        std::vector<std::wstring> vEmpty;
+        auto lnkList = EnumLnkFilesInAppDir(fx, vEmpty);
+        MakeOneFolder(lnkList, folderx);
+        gvFolder.push_back(folderx);
+        gvFolderName.push_back(folderx.sName);
+    }
+#if 0
     for (const auto& path : lnkList)
     {
         ST_APP item;
@@ -176,7 +262,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             gvApp.push_back(item);
         }
     }
-
+#endif
     // Load Fonts
     // - If fonts are not explicitly loaded, Dear ImGui will select an embedded font: either AddFontDefaultVector() or AddFontDefaultBitmap().
     //   This selection is based on (style.FontSizeBase * style.FontScaleMain * style.FontScaleDpi) reaching a small threshold.
@@ -275,68 +361,71 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             bool bOpen = true;
             ImGui::Begin("-AppBox-", &bOpen, win_flags);     
             //ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-            ImGui::Text(u8"帧率(%.0f FPS)", io.Framerate);
+           // ImGui::Text(u8"帧率(%.0f FPS)", io.Framerate);
 
+            gTab0.Render();
+            gpvApp = &(gvFolder[gCurTab].vApp);
 
-            int appIdx = 0;
-            float fSize = 64;
-            iconSize = ImVec2(fSize, fSize);
-
-            ImGuiStyle& style = ImGui::GetStyle();
-
-            // 1. 計算一個完整按鈕所需的固定總寬度（包含按鈕內襯）
-            float buttonWidth = iconSize.x + style.FramePadding.x * 2.0f;
-
-            // 2. 取得當前視窗內容的可用總寬度
-            float windowWidth = ImGui::GetWindowContentRegionMax().x - ImGui::GetWindowContentRegionMin().x;
-
-            // 3. 計算最多能塞下幾個按鈕
-            int maxItemsPerRow = (int)((windowWidth + style.ItemSpacing.x) / (buttonWidth + style.ItemSpacing.x));
-            if (maxItemsPerRow < 1) maxItemsPerRow = 1;
-
-            // 4. 動態計算「橫向等距間距」
-            float dynamicSpacingX = style.ItemSpacing.x;
-            if (maxItemsPerRow > 1 && gvApp.size() >= (size_t)maxItemsPerRow)
+            if (gpvApp)
             {
-                float totalButtonsWidth = maxItemsPerRow * buttonWidth;
-                dynamicSpacingX = (windowWidth - totalButtonsWidth) / (maxItemsPerRow - 1);
+                int appIdx = 0;
+                float fSize = 64;
+                iconSize = ImVec2(fSize, fSize);
+
+                // 1. 計算一個完整按鈕所需的固定總寬度（包含按鈕內襯）
+                float buttonWidth = iconSize.x + style.FramePadding.x * 2.0f;
+
+                // 2. 取得當前視窗內容的可用總寬度
+                float windowWidth = ImGui::GetWindowContentRegionMax().x - ImGui::GetWindowContentRegionMin().x;
+
+                // 3. 計算最多能塞下幾個按鈕
+                int maxItemsPerRow = (int)((windowWidth + style.ItemSpacing.x) / (buttonWidth + style.ItemSpacing.x));
+                if (maxItemsPerRow < 1) maxItemsPerRow = 1;
+
+                // 4. 動態計算「橫向等距間距」
+                float dynamicSpacingX = style.ItemSpacing.x;
+                if (maxItemsPerRow > 1 && gpvApp->size() >= (size_t)maxItemsPerRow)
+                {
+                    float totalButtonsWidth = maxItemsPerRow * buttonWidth;
+                    dynamicSpacingX = (windowWidth - totalButtonsWidth) / (maxItemsPerRow - 1);
+                }
+
+                // 5. 💡 關鍵：用 Style 統一注入橫向與縱向間距，讓 ImGui 自動處理行間距！
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(dynamicSpacingX, dynamicSpacingX));
+
+                for (size_t i = 0; i < gpvApp->size(); ++i)
+                {
+                    auto& a = (*gpvApp)[i];
+
+                    char szName[64] = { 0 };
+                    sprintf_s(szName, "btn%d", appIdx);
+                    appIdx++;
+
+                    // 6. 💡 核心排版：由 ImGui 決定換行，完全不使用 SetCursorPos！
+                    int col = (int)(i % maxItemsPerRow);
+                    if (i > 0 && col > 0)
+                    {
+                        // 如果不是一行的第一個按鈕，就強行並排，並帶入我們計算好的動態間距
+                        ImGui::SameLine(0.0f, dynamicSpacingX);
+                    }
+
+                    // 7. 繪製 ImageButton
+                    if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
+                    {
+                        ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
+                    }
+
+                    // 8. 懸停 Tooltip
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("\xE8\xB7\xAF\xE5\xBE\x91\xEF\xBC\x9A %ls", a.exePathBuf);
+                    }
+                }
+
+                // 9. 💡 記得彈出剛才 Push 的樣式變數
+                ImGui::PopStyleVar();
             }
 
-            // 5. 💡 關鍵：用 Style 統一注入橫向與縱向間距，讓 ImGui 自動處理行間距！
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(dynamicSpacingX, dynamicSpacingX));
-
-            for (size_t i = 0; i < gvApp.size(); ++i)
-            {
-                auto& a = gvApp[i];
-
-                char szName[64] = { 0 };
-                sprintf_s(szName, "btn%d", appIdx);
-                appIdx++;
-
-                // 6. 💡 核心排版：由 ImGui 決定換行，完全不使用 SetCursorPos！
-                int col = (int)(i % maxItemsPerRow);
-                if (i > 0 && col > 0)
-                {
-                    // 如果不是一行的第一個按鈕，就強行並排，並帶入我們計算好的動態間距
-                    ImGui::SameLine(0.0f, dynamicSpacingX);
-                }
-
-                // 7. 繪製 ImageButton
-                if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
-                {
-                    ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
-                }
-
-                // 8. 懸停 Tooltip
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("\xE8\xB7\xAF\xE5\xBE\x91\xEF\xBC\x9A %ls", a.exePathBuf);
-                }
-            }
-
-            // 9. 💡 記得彈出剛才 Push 的樣式變數
-            ImGui::PopStyleVar();
-           
             ImGui::End();
 
             if (!bOpen)
@@ -398,12 +487,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ::DestroyWindow(hwnd);
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
 
-    for (auto a : gvApp)
+    for (auto b : gvFolder)
     {
-        if (a.iconSrv)
+        for (auto a : b.vApp)
         {
-            a.iconSrv->Release();
-            a.iconSrv = nullptr;
+            if (a.iconSrv)
+            {
+                a.iconSrv->Release();
+                a.iconSrv = nullptr;
+            }
         }
     }
     CoUninitialize();
@@ -507,7 +599,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         {
             pWin->TitleBarRect().Contains(imgPt);
             ImRect a = pWin->TitleBarRect();
-            int h = a.GetHeight();
+            float h = a.GetHeight();
             a.Min.x += h;
             a.Max.x -= h;
             if (a.Contains(imgPt))

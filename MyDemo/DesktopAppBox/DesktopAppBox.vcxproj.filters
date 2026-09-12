@@ -9,6 +9,7 @@
     <ClInclude Include="monitor.h" />
     <ClInclude Include="link.h" />
     <ClInclude Include="ResLoader.h" />
+    <ClInclude Include="TabHead.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -16,6 +17,7 @@
     </ClCompile>
     <ClCompile Include="link.cpp" />
     <ClCompile Include="ResLoader.cpp" />
+    <ClCompile Include="TabHead.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.txt" />

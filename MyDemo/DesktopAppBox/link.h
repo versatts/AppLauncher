@@ -8,9 +8,8 @@
 #pragma comment(lib,"comsuppw.lib")
 #pragma comment(lib,"d3d11.lib")
 
-// lnkFullPath: L"C:\\xxx\\xxx.lnk"
 
-std::vector<std::wstring> EnumLnkFilesInAppDir();
+std::vector<std::wstring> EnumLnkFilesInAppDir(const std::wstring& subDirName, std::vector<std::wstring>& outSubDirList);
 
 bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize);
 
