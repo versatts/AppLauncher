@@ -149,9 +149,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="link.h" />
     <ClInclude Include="monitor.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="link.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>

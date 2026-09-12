@@ -13,6 +13,10 @@
 #include <d3d11.h>
 #include <tchar.h>
 
+#include "link.h"
+#include <vector>
+#include <algorithm>
+
 // Data
 static ID3D11Device*            g_pd3dDevice = nullptr;
 static ID3D11DeviceContext*     g_pd3dDeviceContext = nullptr;
@@ -43,13 +47,114 @@ LRESULT CALLBACK SecondWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
     }
     return 0;
 }
+ID3D11ShaderResourceView* IconToD3D11SRV_Simple(ID3D11Device* pDevice, HICON hIcon, int& outW, int& outH)
+{
+    if (!hIcon || !pDevice)
+        return nullptr;
+
+    ICONINFO ii = {};
+    if (!GetIconInfo(hIcon, &ii))
+        return nullptr;
+
+    BITMAP bm = {};
+    GetObject(ii.hbmColor, sizeof(BITMAP), &bm);
+
+    outW = bm.bmWidth > 1 ? bm.bmWidth : 1;
+    outH = bm.bmHeight > 1 ? bm.bmHeight : 1;
+
+    struct ScopedHBITMAP
+    {
+        HBITMAP h;
+        ScopedHBITMAP(HBITMAP h) : h(h) {}
+        ~ScopedHBITMAP() { if (h) DeleteObject(h); }
+    };
+
+    struct ScopedHDC
+    {
+        HDC h;
+        ScopedHDC(HDC h) : h(h) {}
+        ~ScopedHDC() { if (h) DeleteDC(h); }
+    };
+
+    ScopedHBITMAP colorBmp(ii.hbmColor);
+    ScopedHBITMAP maskBmp(ii.hbmMask);
+
+    HDC hdc = GetDC(nullptr);
+    ScopedHDC memDc(CreateCompatibleDC(hdc));
+    ReleaseDC(nullptr, hdc);
+
+    BITMAPINFO bmiColor = {};
+    bmiColor.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmiColor.bmiHeader.biWidth = outW;
+    bmiColor.bmiHeader.biHeight = -outH;
+    bmiColor.bmiHeader.biPlanes = 1;
+    bmiColor.bmiHeader.biBitCount = 32;
+    bmiColor.bmiHeader.biCompression = BI_RGB;
+
+    std::vector<BYTE> pixels(outW * outH * 4, 0);
+    HBITMAP hOld = (HBITMAP)SelectObject(memDc.h, colorBmp.h);
+    GetDIBits(memDc.h, colorBmp.h, 0, outH, pixels.data(), &bmiColor, DIB_RGB_COLORS);
+    SelectObject(memDc.h, hOld);
+
+    // ========= 关键修复：交换B <-> R，BGR → RGBA =========
+    const int totalPixels = outW * outH;
+    for (int i = 0; i < totalPixels; i++)
+    {
+        BYTE* p = &pixels[i * 4];
+        BYTE b = p[0];
+        BYTE r = p[2];
+        p[0] = r;
+        p[2] = b;
+        // p[1] G不变，p[3] Alpha不变
+    }
+
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = outW;
+    texDesc.Height = outH;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA sd = {};
+    sd.pSysMem = pixels.data();
+    sd.SysMemPitch = outW * 4;
+
+    ID3D11Texture2D* pTex = nullptr;
+    HRESULT hr = pDevice->CreateTexture2D(&texDesc, &sd, &pTex);
+    if (FAILED(hr))
+        return nullptr;
+
+    ID3D11ShaderResourceView* pSRV = nullptr;
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = texDesc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+    hr = pDevice->CreateShaderResourceView(pTex, &srvDesc, &pSRV);
+    pTex->Release();
+    return pSRV;
+}
 
 HWND gHwnd;
 int g_WinW = 500;
 int g_WinH = 300;
+struct ST_APP
+{
+    ID3D11ShaderResourceView* iconSrv;
+    WCHAR exePathBuf[MAX_PATH] = { 0 };
+};
+std::vector<ST_APP> gvApp;
 // Main code
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
+    // 全局/静态缓存，一次性加载，不要每帧重复解析+创建纹理
+    ImVec2 iconSize;
+
+
     int cx = ::GetSystemMetrics(SM_CXSCREEN);
     int cy = ::GetSystemMetrics(SM_CYSCREEN);
 
@@ -110,6 +215,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
+
+    auto lnkList = EnumLnkFilesInAppDir();
+    for (const auto& lnkPath : lnkList)
+    {
+        // lnkPath 是完整路径，直接传给 ResolveLnkTarget
+        ST_APP item;
+        if (ResolveLnkTarget(lnkPath.c_str(), item.exePathBuf, MAX_PATH))
+        {
+            HICON hIco = ExtractExeMainIcon(item.exePathBuf);
+            int w, h;
+            item.iconSrv = IconToD3D11SRV_Simple(g_pd3dDevice, hIco, w, h);
+            
+            iconSize = ImVec2((float)w, (float)h);
+            DestroyIcon(hIco); // HICON用完释放
+
+            gvApp.push_back(item);
+        }
+    }
 
     // Load Fonts
     // - If fonts are not explicitly loaded, Dear ImGui will select an embedded font: either AddFontDefaultVector() or AddFontDefaultBitmap().
@@ -190,6 +313,30 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             bool bOpen = true;
             ImGui::Begin("-AppBox-", &bOpen, win_flags);     
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+
+            int appIdx = 0;
+            for(auto a: gvApp)
+            { 
+                char szName[64] = { 0 };
+                sprintf_s(szName, "btn%d", appIdx);
+                appIdx++;
+                // ImageButton: 图标+可选文字
+                if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
+                {
+                    // 点击按钮，执行exe
+                    ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
+                }
+                // 图标旁边叠加文字
+                ImGui::SameLine();
+                //ImGui::Text(exePathBuf);
+            }
+
+
+
+
+
+
+
             ImGui::End();
 
             if (!bOpen)
@@ -251,6 +398,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ::DestroyWindow(hwnd);
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
 
+    for (auto a : gvApp)
+    {
+        if (a.iconSrv)
+        {
+            a.iconSrv->Release();
+            a.iconSrv = nullptr;
+        }
+    }
+    CoUninitialize();
     return 0;
 }
 
