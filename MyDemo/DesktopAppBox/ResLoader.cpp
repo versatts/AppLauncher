@@ -3,32 +3,34 @@
 #pragma comment(lib, "user32.lib")
 
 
+#include <shellapi.h> // 💡 確保有引入 ShellAPI 標頭檔
+
 ID3D11ShaderResourceView* LoadHighestResIconSRV(ID3D11Device* pDevice, const wchar_t* exePath, UINT& outW, UINT& outH)
 {
-    // 💡 1. 核心攔截：判斷傳入的是否為獨立的純 .ico 檔案
-    size_t pathLen = wcslen(exePath);
-    if (pathLen > 4 && _wcsicmp(exePath + pathLen - 4, L".ico") == 0)
+    // =========================================================================
+    // 🚀 核心新增：防禦檢查 ── 判斷目標路徑是否為「資料夾/目錄」
+    // =========================================================================
+    DWORD fileAttr = ::GetFileAttributesW(exePath);
+    if (fileAttr != INVALID_FILE_ATTRIBUTES && (fileAttr & FILE_ATTRIBUTE_DIRECTORY))
     {
-        // 這是純 .ico 檔案 (如 Steam 遊戲快取的圖標)
-        // 透過 PrivateExtractIconsW 可以直接指定想要的尺寸，或者拉出它內建的最大規格
-        HICON hIcon = nullptr;
-        UINT iconId = 0;
-        
-        // 嘗試直接載入 256x256 大型的圖標
-        UINT nExtracted = PrivateExtractIconsW(exePath, 0, 256, 256, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
-        
-        // 如果這個 .ico 檔案最大沒有 256，降級抽取它原本預設的尺寸
-        if (nExtracted == 0 || !hIcon)
-        {
-            nExtracted = PrivateExtractIconsW(exePath, 0, 48, 48, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
-        }
+        // 說明目標是一個真實的資料夾路徑！
+        SHFILEINFOW sfi = { 0 };
+        // 呼叫 SHGetFileInfoW 取得該資料夾在大圖標模式下的 HICON
+        DWORD_PTR result = ::SHGetFileInfoW(
+            exePath,
+            0,
+            &sfi,
+            sizeof(sfi),
+            SHGFI_ICON | SHGFI_LARGEICON // 👈 擷取大型圖標 (通常為 32x32 或系統指定尺寸)
+        );
 
-        if (hIcon)
+        if (result != 0 && sfi.hIcon)
         {
             int w = 0, h = 0;
-            // 直接轉為 D3D11 紋理貼圖
-            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, hIcon, w, h);
-            DestroyIcon(hIcon); // 記得釋放
+            // 完美對接您已經修復好 Alpha 通道全透明 Bug 的轉換函式
+            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, sfi.hIcon, w, h);
+
+            ::DestroyIcon(sfi.hIcon); // 💡 務必釋放 ShellAPI 產生的 HICON
 
             outW = (UINT)w;
             outH = (UINT)h;
@@ -38,7 +40,33 @@ ID3D11ShaderResourceView* LoadHighestResIconSRV(ID3D11Device* pDevice, const wch
     }
 
     // =========================================================================
-    // 💡 2. 原有的 PE 資源擷取邏輯（保持不變，專門處理標準 .exe / .dll 的內部資源）
+    // 💡 原有攔截 ── 判斷是否為純 .ico 檔案 (保持不變)
+    // =========================================================================
+    size_t pathLen = wcslen(exePath);
+    if (pathLen > 4 && _wcsicmp(exePath + pathLen - 4, L".ico") == 0)
+    {
+        HICON hIcon = nullptr;
+        UINT iconId = 0;
+        UINT nExtracted = PrivateExtractIconsW(exePath, 0, 256, 256, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
+        if (nExtracted == 0 || !hIcon)
+        {
+            nExtracted = PrivateExtractIconsW(exePath, 0, 0, 0, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
+        }
+
+        if (hIcon)
+        {
+            int w = 0, h = 0;
+            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, hIcon, w, h);
+            DestroyIcon(hIcon);
+            outW = (UINT)w;
+            outH = (UINT)h;
+            return pSRV;
+        }
+        return nullptr;
+    }
+
+    // =========================================================================
+    // 💡 原有邏輯 ── 處理標準 .exe / .dll 內部資源 (保持不變)
     // =========================================================================
     std::vector<BYTE> iconBlob;
     UINT width = 0, height = 0;
@@ -68,7 +96,7 @@ ID3D11ShaderResourceView* LoadHighestResIconSRV(ID3D11Device* pDevice, const wch
         {
             int w = 0, h = 0;
             ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, hIcon, w, h);
-            DestroyIcon(hIcon); 
+            DestroyIcon(hIcon);
             outW = (UINT)w;
             outH = (UINT)h;
             return pSRV;

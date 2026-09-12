@@ -72,6 +72,26 @@ int gCurTab = 0;
 std::vector<std::wstring> gvFolderName;
 TabHead gTab0;
 
+bool IsPath(const std::string& inputStr)
+{
+    // Retrieve the file attributes from Windows
+    DWORD attributes = ::GetFileAttributesA(inputStr.c_str());
+
+    // INVALID_FILE_ATTRIBUTES means the path does not exist or is inaccessible
+    if (attributes == INVALID_FILE_ATTRIBUTES)
+    {
+        return false;
+    }
+
+    // Check if the FILE_ATTRIBUTE_DIRECTORY flag is present
+    if (attributes & FILE_ATTRIBUTE_DIRECTORY)
+    {
+        return true; // It is a path/directory
+    }
+
+    return false; // It is a regular file
+}
+
 void MakeOneFolder(std::vector<std::wstring>& lnkList, ST_FOLDER& folder)
 {
     for (const auto& path : lnkList)
@@ -170,8 +190,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     //io.ConfigDockingTransparentPayload = true;
 
     // Setup Dear ImGui style
-    ImGui::StyleColorsDark();
-    //ImGui::StyleColorsLight();
+    //ImGui::StyleColorsDark();
+    ImGui::StyleColorsLight();
 
     // Setup scaling
     ImGuiStyle& style = ImGui::GetStyle();
@@ -179,6 +199,61 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     style.FontScaleDpi = main_scale;        // Set initial font scale. (in docking branch: using io.ConfigDpiScaleFonts=true automatically overrides this for every window depending on the current monitor)
     io.ConfigDpiScaleFonts = true;          // [Experimental] Automatically overwrite style.FontScaleDpi in Begin() when Monitor DPI changes. This will scale fonts but _NOT_ scale sizes/padding for now.
     io.ConfigDpiScaleViewports = true;      // [Experimental] Scale Dear ImGui and Platform Windows when Monitor DPI changes.
+
+    style.FramePadding.x = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
+    style.FramePadding.y = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
+
+    ImVec4* colors = style.Colors;
+    colors[ImGuiCol_TitleBg] = ImColor(0x4B, 0x4B, 0x52); // 窗口未激活标题栏
+    colors[ImGuiCol_TitleBgActive] = ImColor(0x4B, 0x4B, 0x52);// 当前激活窗口标题栏
+    colors[ImGuiCol_TitleBgCollapsed] = ImColor(0x4B, 0x4B, 0x52); // 窗口折叠后的标题栏
+
+    //#37373D
+    // 1. 窗口主体背景
+    style.Colors[ImGuiCol_WindowBg] = ImColor(0x37, 0x37, 0x3D);
+
+    style.Colors[ImGuiCol_Text] = ImColor(0xFF, 0xFF, 0xFF);      //普通文字
+    style.Colors[ImGuiCol_TextDisabled] = ImColor(0x80, 0x80, 0x80); //禁用控件文字;
+
+    style.Colors[ImGuiCol_FrameBg] = ImColor(40, 40, 40, 255);
+    style.Colors[ImGuiCol_FrameBgHovered] = ImColor(60, 60, 60, 255);
+    style.Colors[ImGuiCol_FrameBgActive] = ImColor(80, 80, 80, 255);
+
+    style.Colors[ImGuiCol_SliderGrab] = ImColor(60, 180, 255, 255);
+    style.Colors[ImGuiCol_SliderGrabActive] = ImColor(90, 200, 255, 255);
+
+    // Base color exactly matching RGB(85, 85, 85)
+    style.Colors[ImGuiCol_Button] = ImVec4(0.333f, 0.333f, 0.333f, 1.0f); // RGB(85, 85, 85) - Base Button
+    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.400f, 0.400f, 0.400f, 1.0f); // RGB(102, 102, 102) - Elevated hover
+    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Sunken pressed state
+
+    // Optional: If you want all buttons to have sharp corners like MFC globally
+    style.FrameRounding = 10.0f;
+    // =========================================================================
+
+       // ==================== 🚀 FIXED TAB HEADER MATCHING STYLE ====================
+    // 1. Core Tab Colors
+    style.Colors[ImGuiCol_Tab] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Inactive tab
+    style.Colors[ImGuiCol_TabActive] = ImVec4(0.380f, 0.380f, 0.380f, 1.0f); // RGB(97, 97, 97) - Hovered highlight
+    style.Colors[ImGuiCol_TabHovered] = ImVec4(0.480f, 0.480f, 0.480f, 1.0f); // RGB(55, 55, 55) - Active tab (blends with WindowBg)
+    // 2. 💡 Frame / Border Customization
+    // Overriding the border color to make sure it stands out explicitly around your selected items
+    style.Colors[ImGuiCol_Border] = ImVec4(0.450f, 0.460f, 0.470f, 1.0f); // Sharp contrast gray for wireframe lines
+
+    // 3. Geometry Tweak (Enabling Tab Border)
+    style.TabRounding = 4.0f; // Rounded tops
+    style.TabBorderSize = 1.0f; // 💡 CHANGED: Force 1-pixel frame around the tab headers
+    // ============================================================================
+
+        // ==================== 🚀 DARK TOOLTIP BACKGROUND ====================
+    // Deep Charcoal background for all tooltips and popups
+    style.Colors[ImGuiCol_PopupBg] = ImVec4(0.120f, 0.120f, 0.130f, 0.95f); // Near black with 95% opacity
+
+    // Optional: Add a crisp subtle border to frame the tooltip nicely against the backdrop
+    style.Colors[ImGuiCol_Border] = ImVec4(0.350f, 0.350f, 0.360f, 1.0f); // Sleek charcoal border
+    style.PopupBorderSize = 1.0f; // Force a 1-pixel outline on popups/tooltips
+    // ====================================================================
+
 
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -214,67 +289,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         gvFolder.push_back(folderx);
         gvFolderName.push_back(folderx.sName);
     }
-#if 0
-    for (const auto& path : lnkList)
-    {
-        ST_APP item;
-        bool resolved = false;
-        WCHAR iconPath[MAX_PATH] = { 0 };
-
-        // 判斷是否為 Steam 的 .url 快捷方式
-        if (path.size() > 4 && _wcsicmp(path.c_str() + path.size() - 4, L".url") == 0)
-        {
-            // 解析 URL 機制
-            if (ResolveUrlTarget(path.c_str(), item.exePathBuf, MAX_PATH, iconPath, MAX_PATH))
-            {
-                resolved = true;
-            }
-        }
-        else
-        {
-            // 原有的 .lnk 解析機制
-            if (ResolveLnkTarget(path.c_str(), item.exePathBuf, MAX_PATH))
-            {
-                // 標準 exe 的圖標路徑就是它自己
-                wcsncpy_s(iconPath, item.exePathBuf, MAX_PATH);
-                resolved = true;
-            }
-        }
-
-        if (resolved)
-        {
-            UINT w, h;
-            // 💡 傳入 iconPath（如果是 Steam 會是快取的 .ico，如果是普通 EXE 會是 exe 自己的路徑）
-            item.iconSrv = LoadHighestResIconSRV(g_pd3dDevice, iconPath, w, h);
-
-            // 如果從指定路徑載入高清資源失敗（例如某些特殊 URL 快捷方式沒快取圖標）
-            if (!item.iconSrv)
-            {
-                // 降級備用方案：使用傳統的系統圖標提取
-                HICON hIco = ExtractExeMainIcon(iconPath);
-                if (hIco) {
-                    int sw = 0, sh = 0;
-                    item.iconSrv = IconToD3D11SRV_Simple(g_pd3dDevice, hIco, sw, sh);
-                    DestroyIcon(hIco);
-                }
-            }
-
-            gvApp.push_back(item);
-        }
-    }
-#endif
-    // Load Fonts
-    // - If fonts are not explicitly loaded, Dear ImGui will select an embedded font: either AddFontDefaultVector() or AddFontDefaultBitmap().
-    //   This selection is based on (style.FontSizeBase * style.FontScaleMain * style.FontScaleDpi) reaching a small threshold.
-    // - You can load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
-    // - If a file cannot be loaded, AddFont functions will return a nullptr. Please handle those errors in your code (e.g. use an assertion, display an error and quit).
-    // - Read 'docs/FONTS.md' for more instructions and details.
-    // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use FreeType for higher quality font rendering.
-    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    // ==================== 修正後的 Load Fonts 區段 ====================
-
-    // 1. 如果需要加載 ImGui 預設的英文型態字體，呼叫 AddFontDefault() 即可（非必須）
-    // io.Fonts->AddFontDefault(); 
 
     // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
     ImFontConfig cfg;
@@ -352,7 +366,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             ImGuiWindowFlags win_flags = 0;
             //win_flags |= ImGuiWindowFlags_NoMove;         // ❌禁止拖动移动
             win_flags |= ImGuiWindowFlags_NoResize;       // ❌禁止缩放大小
-            //win_flags |= ImGuiWindowFlags_NoCollapse;     // ❌禁止折叠（去掉右上角最小化按钮）
+            win_flags |= ImGuiWindowFlags_NoCollapse;     // ❌禁止折叠（去掉右上角最小化按钮）
             // win_flags |= ImGuiWindowFlags_NoTitleBar;    // 可选：要不要标题栏；如果要保留标题栏就不要这个flag
             win_flags |= ImGuiWindowFlags_NoDocking;
 
@@ -410,15 +424,26 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     }
 
                     // 7. 繪製 ImageButton
-                    if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
                     {
-                        ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
+                        if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
+                        {
+                            ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
+                        }
                     }
 
                     // 8. 懸停 Tooltip
                     if (ImGui::IsItemHovered())
                     {
-                        ImGui::SetTooltip("\xE8\xB7\xAF\xE5\xBE\x91\xEF\xBC\x9A %ls", a.exePathBuf);
+                        std::string sTip;
+                        int size_needed = WideCharToMultiByte(CP_UTF8, 0, a.exePathBuf, -1, NULL, 0, NULL, NULL);
+                        if (size_needed > 0) {
+                            sTip.resize(size_needed - 1);
+                            WideCharToMultiByte(CP_UTF8, 0, a.exePathBuf, -1, &sTip[0], size_needed, NULL, NULL);
+                        }
+                        if (IsPath(sTip))
+                        {
+                            ImGui::SetTooltip(sTip.c_str());
+                        }
                     }
                 }
 
