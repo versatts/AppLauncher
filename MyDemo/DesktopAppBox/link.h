@@ -14,4 +14,6 @@ std::vector<std::wstring> EnumLnkFilesInAppDir();
 
 bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize);
 
+bool ResolveUrlTarget(LPCWSTR urlFullPath, WCHAR* outExePath, int outPathBufSize, WCHAR* outIconPath, int outIconBufSize);
+
 HICON ExtractExeMainIcon(LPCWSTR exePath);

@@ -1,43 +1,42 @@
-#include "link.h"
-
-// »ñÈ¡µ±Ç°exeËùÔÚÄ¿Â¼ÏÂËùÓĞ *.lnk ÎÄ¼şµÄÍêÕûÂ·¾¶
-// ·µ»ØÖµ£ºËùÓĞlnkÈ«Â·¾¶ÁĞ±í
+ï»¿#include "link.h"
+#include <intshcut.h>
+// è·å–å½“å‰exeæ‰€åœ¨ç›®å½•ä¸‹æ‰€æœ‰ *.lnk æ–‡ä»¶çš„å®Œæ•´è·¯å¾„
+// è¿”å›å€¼ï¼šæ‰€æœ‰lnkå…¨è·¯å¾„åˆ—è¡¨
 std::vector<std::wstring> EnumLnkFilesInAppDir()
 {
     std::vector<std::wstring> result;
-
     WCHAR exeFullPath[MAX_PATH] = { 0 };
     GetModuleFileNameW(NULL, exeFullPath, MAX_PATH);
 
-    // ÌáÈ¡Ä¿Â¼£¨È¥µôexeÎÄ¼şÃû£©
     WCHAR appDir[MAX_PATH] = { 0 };
     WCHAR* pSlash = wcsrchr(exeFullPath, L'\\');
-    if (!pSlash)
-        return result;
+    if (!pSlash) return result;
     size_t dirLen = pSlash - exeFullPath;
     wcsncpy_s(appDir, exeFullPath, dirLen);
     appDir[dirLen] = L'\0';
 
-    // Æ´½ÓËÑË÷Í¨Åä·û£ºC:\xxx\*.lnk
-    WCHAR searchPath[MAX_PATH] = { 0 };
-    swprintf_s(searchPath, L"%s\\lnk\\*.lnk", appDir);
+    // ğŸ’¡ åŒæ™‚è™•ç† .lnk èˆ‡ .url
+    std::vector<std::wstring> extensions = { L"\\lnk\\*.lnk", L"\\lnk\\*.url" };
 
-    WIN32_FIND_DATAW findData = {};
-    HANDLE hFind = FindFirstFileW(searchPath, &findData);
-    if (hFind == INVALID_HANDLE_VALUE)
-        return result;
-
-    do
+    for (const auto& ext : extensions)
     {
-        // Ìø¹ıÄ¿Â¼£¬Ö»È¡ÎÄ¼ş
-        if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-        {
-            std::wstring fullPath = std::wstring(appDir) + L"\\lnk\\" + findData.cFileName;
-            result.push_back(fullPath);
-        }
-    } while (FindNextFileW(hFind, &findData));
+        WCHAR searchPath[MAX_PATH] = { 0 };
+        swprintf_s(searchPath, L"%s%s", appDir, ext.c_str());
 
-    FindClose(hFind);
+        WIN32_FIND_DATAW findData = {};
+        HANDLE hFind = FindFirstFileW(searchPath, &findData);
+        if (hFind != INVALID_HANDLE_VALUE)
+        {
+            do {
+                if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+                {
+                    std::wstring fullPath = std::wstring(appDir) + L"\\lnk\\" + findData.cFileName;
+                    result.push_back(fullPath);
+                }
+            } while (FindNextFileW(hFind, &findData));
+            FindClose(hFind);
+        }
+    }
     return result;
 }
 
@@ -53,15 +52,15 @@ bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize
     hr = pShellLink->QueryInterface(IID_IPersistFile, (void**)&pPersistFile);
     if (FAILED(hr)) { pShellLink->Release(); return false; }
 
-    // ¼ÓÔØlnkÎÄ¼ş
+    // åŠ è½½lnkæ–‡ä»¶
     hr = pPersistFile->Load(lnkFullPath, STGM_READ);
     if (SUCCEEDED(hr))
     {
-        // ½âÎöÁ´½Ó£¨SLR_NOTRACK£º²»ÆôÓÃÎÄ¼ş¸ú×Ù£¬±ÜÃâµ¯´°£©
+        // è§£æé“¾æ¥ï¼ˆSLR_NOTRACKï¼šä¸å¯ç”¨æ–‡ä»¶è·Ÿè¸ªï¼Œé¿å…å¼¹çª—ï¼‰
         hr = pShellLink->Resolve(nullptr, SLR_NO_UI | SLR_NOTRACK);
         if (SUCCEEDED(hr))
         {
-            // »ñÈ¡Ä¿±êÂ·¾¶
+            // è·å–ç›®æ ‡è·¯å¾„
             hr = pShellLink->GetPath(outExePath, outPathBufSize, nullptr, SLGP_UNCPRIORITY);
         }
     }
@@ -71,7 +70,27 @@ bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize
     return SUCCEEDED(hr);
 }
 
-// ÌáÈ¡exeµÚ0ºÅÍ¼±ê£¨Ö÷Í¼±ê£©
+#include <intshcut.h> // ğŸ’¡ å¿…é ˆå¼•å…¥æ­¤æ¨™é ­æª”
+
+bool ResolveUrlTarget(LPCWSTR urlFullPath, WCHAR* outExePath, int outPathBufSize, WCHAR* outIconPath, int outIconBufSize)
+{
+    *outExePath = 0;
+    if (outIconPath) *outIconPath = 0;
+
+    // 1. ä½¿ç”¨ INI é…ç½®è®€å– API ä¾†è§£ææ›´é«˜æ•ˆã€æ›´å®‰å…¨ï¼ˆä¸æ€• Steam å”è­°ç‰¹æ®Šæ ¼å¼ï¼‰
+    // è®€å–å•Ÿå‹•å”è­°è·¯å¾‘ (steam://rungameid/xxxx)
+    GetPrivateProfileStringW(L"InternetShortcut", L"URL", L"", outExePath, outPathBufSize, urlFullPath);
+
+    // è®€å– Steam å¿«å–çš„æœ¬åœ°åœ–æ¨™è·¯å¾‘
+    if (outIconPath)
+    {
+        GetPrivateProfileStringW(L"InternetShortcut", L"IconFile", L"", outIconPath, outIconBufSize, urlFullPath);
+    }
+
+    // å¦‚æœæˆåŠŸæ‹¿åˆ° URLï¼Œå°±ä»£è¡¨è§£ææˆåŠŸ
+    return (wcslen(outExePath) > 0);
+}
+// æå–exeç¬¬0å·å›¾æ ‡ï¼ˆä¸»å›¾æ ‡ï¼‰
 HICON ExtractExeMainIcon(LPCWSTR exePath)
 {
     HICON hIconLarge = nullptr;
@@ -79,6 +98,6 @@ HICON ExtractExeMainIcon(LPCWSTR exePath)
     UINT nIcons = ExtractIconEx(exePath, 0, &hIconLarge, &hIconSmall, 1);
     if (nIcons == 0)
         return nullptr;
-    DestroyIcon(hIconSmall); // Ğ¡Í¼±ê²»ÓÃ£¬Ö±½ÓÊÍ·Å
+    DestroyIcon(hIconSmall); // å°å›¾æ ‡ä¸ç”¨ï¼Œç›´æ¥é‡Šæ”¾
     return hIconLarge;
 }

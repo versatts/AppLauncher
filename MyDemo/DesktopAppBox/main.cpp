@@ -129,18 +129,49 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
     auto lnkList = EnumLnkFilesInAppDir();
-    for (const auto& lnkPath : lnkList)
+    for (const auto& path : lnkList)
     {
-        // lnkPath 是完整路径，直接传给 ResolveLnkTarget
         ST_APP item;
-        if (ResolveLnkTarget(lnkPath.c_str(), item.exePathBuf, MAX_PATH))
+        bool resolved = false;
+        WCHAR iconPath[MAX_PATH] = { 0 };
+
+        // 判斷是否為 Steam 的 .url 快捷方式
+        if (path.size() > 4 && _wcsicmp(path.c_str() + path.size() - 4, L".url") == 0)
         {
-            HICON hIco = ExtractExeMainIcon(item.exePathBuf);
+            // 解析 URL 機制
+            if (ResolveUrlTarget(path.c_str(), item.exePathBuf, MAX_PATH, iconPath, MAX_PATH))
+            {
+                resolved = true;
+            }
+        }
+        else
+        {
+            // 原有的 .lnk 解析機制
+            if (ResolveLnkTarget(path.c_str(), item.exePathBuf, MAX_PATH))
+            {
+                // 標準 exe 的圖標路徑就是它自己
+                wcsncpy_s(iconPath, item.exePathBuf, MAX_PATH);
+                resolved = true;
+            }
+        }
+
+        if (resolved)
+        {
             UINT w, h;
-            item.iconSrv = LoadHighestResIconSRV(g_pd3dDevice, item.exePathBuf, w, h);
-            
-            iconSize = ImVec2((float)w, (float)h);
-            DestroyIcon(hIco); // HICON用完释放
+            // 💡 傳入 iconPath（如果是 Steam 會是快取的 .ico，如果是普通 EXE 會是 exe 自己的路徑）
+            item.iconSrv = LoadHighestResIconSRV(g_pd3dDevice, iconPath, w, h);
+
+            // 如果從指定路徑載入高清資源失敗（例如某些特殊 URL 快捷方式沒快取圖標）
+            if (!item.iconSrv)
+            {
+                // 降級備用方案：使用傳統的系統圖標提取
+                HICON hIco = ExtractExeMainIcon(iconPath);
+                if (hIco) {
+                    int sw = 0, sh = 0;
+                    item.iconSrv = IconToD3D11SRV_Simple(g_pd3dDevice, hIco, sw, sh);
+                    DestroyIcon(hIco);
+                }
+            }
 
             gvApp.push_back(item);
         }
