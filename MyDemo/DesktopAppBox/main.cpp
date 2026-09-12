@@ -9,6 +9,7 @@
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
+#include "imgui_internal.h"
 #include <d3d11.h>
 #include <tchar.h>
 
@@ -49,6 +50,9 @@ int g_WinH = 300;
 // Main code
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
+    int cx = ::GetSystemMetrics(SM_CXSCREEN);
+    int cy = ::GetSystemMetrics(SM_CYSCREEN);
+
     // Make process DPI aware and obtain main monitor scale
     ImGui_ImplWin32_EnableDpiAwareness();
     float main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
@@ -57,7 +61,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui-001", nullptr };
     ::RegisterClassExW(&wc);
     HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"", WS_POPUP | /*WS_OVERLAPPEDWINDOW | */WS_CLIPCHILDREN
-        , 400, 400, (int)(g_WinW * main_scale), (int)(g_WinH * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
+        , (cx - g_WinW) / 2, (cy - g_WinH) / 2, (int)(g_WinW * main_scale), (int)(g_WinH * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
 
     // Initialize Direct3D
     if (!CreateDeviceD3D(hwnd))
@@ -175,26 +179,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             ImGui::SetNextWindowSize(main_vp->WorkSize, ImGuiCond_Always);
             // 窗口标志
             ImGuiWindowFlags win_flags = 0;
-            win_flags |= ImGuiWindowFlags_NoMove;         // ❌禁止拖动移动
+            //win_flags |= ImGuiWindowFlags_NoMove;         // ❌禁止拖动移动
             win_flags |= ImGuiWindowFlags_NoResize;       // ❌禁止缩放大小
-            win_flags |= ImGuiWindowFlags_NoCollapse;     // ❌禁止折叠（去掉右上角最小化按钮）
+            //win_flags |= ImGuiWindowFlags_NoCollapse;     // ❌禁止折叠（去掉右上角最小化按钮）
             // win_flags |= ImGuiWindowFlags_NoTitleBar;    // 可选：要不要标题栏；如果要保留标题栏就不要这个flag
             win_flags |= ImGuiWindowFlags_NoDocking;
 
             static float f = 0.0f;
             static int counter = 0;
-
-            ImGui::Begin("Hello, world 3!", nullptr, win_flags);                          // Create a window called "Hello, world!" and append into it.
-
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
-
+            bool bOpen = true;
+            ImGui::Begin("-AppBox-", &bOpen, win_flags);     
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
             ImGui::End();
+
+            if (!bOpen)
+            {
+                // 这里你可以选择：关闭MFC对话框
+                ::PostMessage(hwnd, WM_CLOSE, 0, 0);
+            }
         }
 
 
@@ -335,6 +337,33 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg)
     {
+    case WM_NCHITTEST:
+    {
+        // 获取屏幕坐标
+        POINT pt = { LOWORD(lParam), HIWORD(lParam) };
+        // 交给ImGui判断当前点是否在ImGui窗口标题栏
+        ImGuiIO& io = ImGui::GetIO();
+        ImVec2 imgPt = ImVec2((float)pt.x, (float)pt.y);
+        ImGuiWindow* pWin = ImGui::FindWindowByName("-AppBox-");
+        
+        bool bCaption = false;
+        if (pWin) 
+        {
+            pWin->TitleBarRect().Contains(imgPt);
+            ImRect a = pWin->TitleBarRect();
+            int h = a.GetHeight();
+            a.Min.x += h;
+            a.Max.x -= h;
+            if (a.Contains(imgPt))
+                bCaption = true;
+        }
+ 
+        if (bCaption)
+        {
+            return HTCAPTION;
+        }
+        return HTCLIENT;
+    }
     case WM_CREATE:
     {
     }
