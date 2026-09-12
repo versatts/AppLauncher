@@ -482,81 +482,121 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             static int counter = 0;
             bool bOpen = true;
             ImGui::Begin("-AppBox-", &bOpen, win_flags);     
-            //ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-           // ImGui::Text(u8"帧率(%.0f FPS)", io.Framerate);
 
-            gTab0.Render();
-            gpvApp = &(gvFolder[gCurTab].vApp);
+            // ==================== 🚀 修正版：Win32 主視窗跟隨折疊縮放（強制置底） ====================
+            static bool lastCollapsedState = false;
+            bool isCollapsed = ImGui::IsWindowCollapsed();
 
-            if (gpvApp)
+            if (isCollapsed != lastCollapsedState)
             {
-                int appIdx = 0;
-                float fSize = 64;
-                iconSize = ImVec2(fSize, fSize);
+                lastCollapsedState = isCollapsed;
 
-                // 1. 計算一個完整按鈕所需的固定總寬度（包含按鈕內襯）
-                float buttonWidth = iconSize.x + style.FramePadding.x * 2.0f;
+                int currentW = (int)(g_WinW * main_scale);
+                int targetH = 0;
 
-                // 2. 取得當前視窗內容的可用總寬度
-                float windowWidth = ImGui::GetWindowContentRegionMax().x - ImGui::GetWindowContentRegionMin().x;
-
-                // 3. 計算最多能塞下幾個按鈕
-                int maxItemsPerRow = (int)((windowWidth + style.ItemSpacing.x) / (buttonWidth + style.ItemSpacing.x));
-                if (maxItemsPerRow < 1) maxItemsPerRow = 1;
-
-                // 4. 動態計算「橫向等距間距」
-                float dynamicSpacingX = style.ItemSpacing.x;
-                if (maxItemsPerRow > 1 && gpvApp->size() >= (size_t)maxItemsPerRow)
+                if (isCollapsed)
                 {
-                    float totalButtonsWidth = maxItemsPerRow * buttonWidth;
-                    dynamicSpacingX = (windowWidth - totalButtonsWidth) / (maxItemsPerRow - 1);
+                    // A. 被折疊了：縮小到只剩標題列高度
+                    float titleBarHeight = ImGui::GetFontSize() + style.FramePadding.y * 2.0f;
+                    targetH = (int)(titleBarHeight);// + style.WindowPadding.y);
+
+                    g_ResizeWidth = 0;
+                    g_ResizeHeight = 0;
+                }
+                else
+                {
+                    // B. 被展開了：還原回原本完整的物理高度
+                    targetH = (int)(g_WinH * main_scale);
                 }
 
-                // 5. 💡 關鍵：用 Style 統一注入橫向與縱向間距，讓 ImGui 自動處理行間距！
-                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(dynamicSpacingX, dynamicSpacingX));
+                // 💡 核心修正：
+                // 1. 第二個參數不能傳 NULL，必須強制鎖定為 HWND_BOTTOM
+                // 2. 標記加上 SWP_NOOWNERZORDER，徹底禁止 Windows 調整其與桌面管理器的 Owner 層級關係
+                ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, currentW, targetH,
+                    SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+            }
+            // =====================================================================================
 
-                for (size_t i = 0; i < gpvApp->size(); ++i)
+
+            // 如果被折疊了，後半段的按鈕網格和文字渲染就不用跑了（ImGui 內部會自動跳過，但我們這裡加個防禦）
+            if (!isCollapsed)
+            {
+                //ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+               // ImGui::Text(u8"帧率(%.0f FPS)", io.Framerate);
+
+                gTab0.Render();
+                gpvApp = &(gvFolder[gCurTab].vApp);
+
+                if (gpvApp)
                 {
-                    auto& a = (*gpvApp)[i];
+                    int appIdx = 0;
+                    float fSize = 64;
+                    iconSize = ImVec2(fSize, fSize);
 
-                    char szName[64] = { 0 };
-                    sprintf_s(szName, "btn%d", appIdx);
-                    appIdx++;
+                    // 1. 計算一個完整按鈕所需的固定總寬度（包含按鈕內襯）
+                    float buttonWidth = iconSize.x + style.FramePadding.x * 2.0f;
 
-                    // 6. 💡 核心排版：由 ImGui 決定換行，完全不使用 SetCursorPos！
-                    int col = (int)(i % maxItemsPerRow);
-                    if (i > 0 && col > 0)
+                    // 2. 取得當前視窗內容的可用總寬度
+                    float windowWidth = ImGui::GetWindowContentRegionMax().x - ImGui::GetWindowContentRegionMin().x;
+
+                    // 3. 計算最多能塞下幾個按鈕
+                    int maxItemsPerRow = (int)((windowWidth + style.ItemSpacing.x) / (buttonWidth + style.ItemSpacing.x));
+                    if (maxItemsPerRow < 1) maxItemsPerRow = 1;
+
+                    // 4. 動態計算「橫向等距間距」
+                    float dynamicSpacingX = style.ItemSpacing.x;
+                    if (maxItemsPerRow > 1 && gpvApp->size() >= (size_t)maxItemsPerRow)
                     {
-                        // 如果不是一行的第一個按鈕，就強行並排，並帶入我們計算好的動態間距
-                        ImGui::SameLine(0.0f, dynamicSpacingX);
+                        float totalButtonsWidth = maxItemsPerRow * buttonWidth;
+                        dynamicSpacingX = (windowWidth - totalButtonsWidth) / (maxItemsPerRow - 1);
                     }
 
-                    // 7. 繪製 ImageButton
+                    // 5. 💡 關鍵：用 Style 統一注入橫向與縱向間距，讓 ImGui 自動處理行間距！
+                    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(dynamicSpacingX, dynamicSpacingX));
+
+                    for (size_t i = 0; i < gpvApp->size(); ++i)
                     {
-                        if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
+                        auto& a = (*gpvApp)[i];
+
+                        char szName[64] = { 0 };
+                        sprintf_s(szName, "btn%d", appIdx);
+                        appIdx++;
+
+                        // 6. 💡 核心排版：由 ImGui 決定換行，完全不使用 SetCursorPos！
+                        int col = (int)(i % maxItemsPerRow);
+                        if (i > 0 && col > 0)
                         {
-                            ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
+                            // 如果不是一行的第一個按鈕，就強行並排，並帶入我們計算好的動態間距
+                            ImGui::SameLine(0.0f, dynamicSpacingX);
+                        }
+
+                        // 7. 繪製 ImageButton
+                        {
+                            if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
+                            {
+                                ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
+                            }
+                        }
+
+                        // 8. 懸停 Tooltip
+                        if (ImGui::IsItemHovered())
+                        {
+                            std::string sTip;
+                            int size_needed = WideCharToMultiByte(CP_UTF8, 0, a.exePathBuf, -1, NULL, 0, NULL, NULL);
+                            if (size_needed > 0) {
+                                sTip.resize(size_needed - 1);
+                                WideCharToMultiByte(CP_UTF8, 0, a.exePathBuf, -1, &sTip[0], size_needed, NULL, NULL);
+                            }
+                            if (IsPath(sTip))
+                            {
+                                ImGui::SetTooltip(sTip.c_str());
+                            }
                         }
                     }
 
-                    // 8. 懸停 Tooltip
-                    if (ImGui::IsItemHovered())
-                    {
-                        std::string sTip;
-                        int size_needed = WideCharToMultiByte(CP_UTF8, 0, a.exePathBuf, -1, NULL, 0, NULL, NULL);
-                        if (size_needed > 0) {
-                            sTip.resize(size_needed - 1);
-                            WideCharToMultiByte(CP_UTF8, 0, a.exePathBuf, -1, &sTip[0], size_needed, NULL, NULL);
-                        }
-                        if (IsPath(sTip))
-                        {
-                            ImGui::SetTooltip(sTip.c_str());
-                        }
-                    }
+                    // 9. 💡 記得彈出剛才 Push 的樣式變數
+                    ImGui::PopStyleVar();
                 }
-
-                // 9. 💡 記得彈出剛才 Push 的樣式變數
-                ImGui::PopStyleVar();
             }
 
             ImGui::End();
