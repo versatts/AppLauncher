@@ -105,25 +105,99 @@ bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize
     return SUCCEEDED(hr);
 }
 
+// 輔助函式：從 Windows 註冊表自動撈出當前系統預設瀏覽器的可執行檔 (.exe) 路徑
+std::wstring GetDefaultBrowserExePath()
+{
+    WCHAR exePath[MAX_PATH] = { 0 };
+    DWORD bufSize = sizeof(exePath);
+    HKEY hKey;
+
+    // 1. 尋找當前用戶預設處理 http 協議的關聯名稱 (例如 "ChromeHTML", "MSEdgeHTM")
+    LPCWSTR regPath = L"Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice";
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, regPath, 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        WCHAR progId[256] = { 0 };
+        DWORD progIdSize = sizeof(progId);
+        if (RegQueryValueExW(hKey, L"ProgId", NULL, NULL, (LPBYTE)progId, &progIdSize) == ERROR_SUCCESS)
+        {
+            RegCloseKey(hKey);
+
+            // 2. 拿著 ProgId 去 Classes 核心尋找它真實對應的啟動指令路徑
+            std::wstring commandPath = std::wstring(L"") + progId + L"\\shell\\open\\command";
+            if (RegOpenKeyExW(HKEY_CLASSES_ROOT, commandPath.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+            {
+                WCHAR rawCommand[MAX_PATH] = { 0 };
+                DWORD rawSize = sizeof(rawCommand);
+                if (RegQueryValueExW(hKey, L"", NULL, NULL, (LPBYTE)rawCommand, &rawSize) == ERROR_SUCCESS)
+                {
+                    // 3. 得到的字串通常帶有引號和參數，例如: "C:\Program Files\...\chrome.exe" -- "%1"
+                    // 我們需要將真實的 .exe 路徑提取出來
+                    std::wstring cmdStr = rawCommand;
+                    size_t firstQuote = cmdStr.find(L"\"");
+                    if (firstQuote != std::wstring::npos)
+                    {
+                        size_t secondQuote = cmdStr.find(L"\"", firstQuote + 1);
+                        if (secondQuote != std::wstring::npos)
+                        {
+                            // 擷取雙引號中間的純路徑
+                            std::wstring purePath = cmdStr.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+                            RegCloseKey(hKey);
+                            return purePath;
+                        }
+                    }
+
+                    // 如果沒有雙引號，截斷空格前的路徑
+                    size_t firstSpace = cmdStr.find(L" ");
+                    if (firstSpace != std::wstring::npos) {
+                        RegCloseKey(hKey);
+                        return cmdStr.substr(0, firstSpace);
+                    }
+                    RegCloseKey(hKey);
+                    return cmdStr;
+                }
+                RegCloseKey(hKey);
+            }
+        }
+        else {
+            RegCloseKey(hKey);
+        }
+    }
+
+    // 4. 極端防禦降級：如果用戶清空了預設關聯，強行返回系統自帶的 Edge 瀏覽器絕對路徑
+    return L"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+}
+
+
 #include <intshcut.h> // 💡 必須引入此標頭檔
 
+// 升級後的變體：支援自動修正缺失圖標的網頁快捷方式
 bool ResolveUrlTarget(LPCWSTR urlFullPath, WCHAR* outExePath, int outPathBufSize, WCHAR* outIconPath, int outIconBufSize)
 {
     *outExePath = 0;
     if (outIconPath) *outIconPath = 0;
 
-    // 1. 使用 INI 配置讀取 API 來解析更高效、更安全（不怕 Steam 協議特殊格式）
-    // 讀取啟動協議路徑 (steam://rungameid/xxxx)
+    // 1. 讀取啟動協議路徑 (例如 https://google.com 或 steam://rungameid/xxx)
     GetPrivateProfileStringW(L"InternetShortcut", L"URL", L"", outExePath, outPathBufSize, urlFullPath);
+    if (wcslen(outExePath) == 0)
+    {
+        return false; // 根本不是合法的 .url 檔案
+    }
 
-    // 讀取 Steam 快取的本地圖標路徑
+    // 2. 讀取圖標欄位
     if (outIconPath)
     {
         GetPrivateProfileStringW(L"InternetShortcut", L"IconFile", L"", outIconPath, outIconBufSize, urlFullPath);
+
+        // 💥 【核心升級防禦】如果圖標路徑為空（代表這是一個標準的網頁連結快捷，不是 Steam 遊戲）
+        if (wcslen(outIconPath) == 0)
+        {
+            // 自動去撈取當前電腦預設瀏覽器的 exe 路徑，拿它當作圖標來源！
+            std::wstring defaultBrowser = GetDefaultBrowserExePath();
+            wcsncpy_s(outIconPath, outIconBufSize, defaultBrowser.c_str(), _TRUNCATE);
+        }
     }
 
-    // 如果成功拿到 URL，就代表解析成功
-    return (wcslen(outExePath) > 0);
+    return true;
 }
 // 提取exe第0号图标（主图标）
 HICON ExtractExeMainIcon(LPCWSTR exePath)
