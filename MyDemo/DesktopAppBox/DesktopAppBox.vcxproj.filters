@@ -8,12 +8,14 @@
   <ItemGroup>
     <ClInclude Include="monitor.h" />
     <ClInclude Include="link.h" />
+    <ClInclude Include="ResLoader.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>sources</Filter>
     </ClCompile>
     <ClCompile Include="link.cpp" />
+    <ClCompile Include="ResLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.txt" />

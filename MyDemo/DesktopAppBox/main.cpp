@@ -14,6 +14,7 @@
 #include <tchar.h>
 
 #include "link.h"
+#include "ResLoader.h"
 #include <vector>
 #include <algorithm>
 
@@ -47,99 +48,10 @@ LRESULT CALLBACK SecondWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
     }
     return 0;
 }
-ID3D11ShaderResourceView* IconToD3D11SRV_Simple(ID3D11Device* pDevice, HICON hIcon, int& outW, int& outH)
-{
-    if (!hIcon || !pDevice)
-        return nullptr;
-
-    ICONINFO ii = {};
-    if (!GetIconInfo(hIcon, &ii))
-        return nullptr;
-
-    BITMAP bm = {};
-    GetObject(ii.hbmColor, sizeof(BITMAP), &bm);
-
-    outW = bm.bmWidth > 1 ? bm.bmWidth : 1;
-    outH = bm.bmHeight > 1 ? bm.bmHeight : 1;
-
-    struct ScopedHBITMAP
-    {
-        HBITMAP h;
-        ScopedHBITMAP(HBITMAP h) : h(h) {}
-        ~ScopedHBITMAP() { if (h) DeleteObject(h); }
-    };
-
-    struct ScopedHDC
-    {
-        HDC h;
-        ScopedHDC(HDC h) : h(h) {}
-        ~ScopedHDC() { if (h) DeleteDC(h); }
-    };
-
-    ScopedHBITMAP colorBmp(ii.hbmColor);
-    ScopedHBITMAP maskBmp(ii.hbmMask);
-
-    HDC hdc = GetDC(nullptr);
-    ScopedHDC memDc(CreateCompatibleDC(hdc));
-    ReleaseDC(nullptr, hdc);
-
-    BITMAPINFO bmiColor = {};
-    bmiColor.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmiColor.bmiHeader.biWidth = outW;
-    bmiColor.bmiHeader.biHeight = -outH;
-    bmiColor.bmiHeader.biPlanes = 1;
-    bmiColor.bmiHeader.biBitCount = 32;
-    bmiColor.bmiHeader.biCompression = BI_RGB;
-
-    std::vector<BYTE> pixels(outW * outH * 4, 0);
-    HBITMAP hOld = (HBITMAP)SelectObject(memDc.h, colorBmp.h);
-    GetDIBits(memDc.h, colorBmp.h, 0, outH, pixels.data(), &bmiColor, DIB_RGB_COLORS);
-    SelectObject(memDc.h, hOld);
-
-    // ========= 关键修复：交换B <-> R，BGR → RGBA =========
-    const int totalPixels = outW * outH;
-    for (int i = 0; i < totalPixels; i++)
-    {
-        BYTE* p = &pixels[i * 4];
-        BYTE b = p[0];
-        BYTE r = p[2];
-        p[0] = r;
-        p[2] = b;
-        // p[1] G不变，p[3] Alpha不变
-    }
-
-    D3D11_TEXTURE2D_DESC texDesc = {};
-    texDesc.Width = outW;
-    texDesc.Height = outH;
-    texDesc.MipLevels = 1;
-    texDesc.ArraySize = 1;
-    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    texDesc.SampleDesc.Count = 1;
-    texDesc.Usage = D3D11_USAGE_DEFAULT;
-    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
-    D3D11_SUBRESOURCE_DATA sd = {};
-    sd.pSysMem = pixels.data();
-    sd.SysMemPitch = outW * 4;
-
-    ID3D11Texture2D* pTex = nullptr;
-    HRESULT hr = pDevice->CreateTexture2D(&texDesc, &sd, &pTex);
-    if (FAILED(hr))
-        return nullptr;
-
-    ID3D11ShaderResourceView* pSRV = nullptr;
-    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Format = texDesc.Format;
-    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = 1;
-    hr = pDevice->CreateShaderResourceView(pTex, &srvDesc, &pSRV);
-    pTex->Release();
-    return pSRV;
-}
 
 HWND gHwnd;
-int g_WinW = 500;
-int g_WinH = 300;
+int g_WinW = 600;
+int g_WinH = 400;
 struct ST_APP
 {
     ID3D11ShaderResourceView* iconSrv;
@@ -224,8 +136,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         if (ResolveLnkTarget(lnkPath.c_str(), item.exePathBuf, MAX_PATH))
         {
             HICON hIco = ExtractExeMainIcon(item.exePathBuf);
-            int w, h;
-            item.iconSrv = IconToD3D11SRV_Simple(g_pd3dDevice, hIco, w, h);
+            UINT w, h;
+            item.iconSrv = LoadHighestResIconSRV(g_pd3dDevice, item.exePathBuf, w, h);
             
             iconSize = ImVec2((float)w, (float)h);
             DestroyIcon(hIco); // HICON用完释放
@@ -242,15 +154,34 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // - Read 'docs/FONTS.md' for more instructions and details.
     // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use FreeType for higher quality font rendering.
     // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    style.FontSizeBase = 20.0f;
-    io.Fonts->AddFontDefaultVector();
-    io.Fonts->AddFontDefaultBitmap();
-    io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf");
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf");
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf");
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf");
-    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf");
-    //IM_ASSERT(font != nullptr);
+    // ==================== 修正後的 Load Fonts 區段 ====================
+
+    // 1. 如果需要加載 ImGui 預設的英文型態字體，呼叫 AddFontDefault() 即可（非必須）
+    // io.Fonts->AddFontDefault(); 
+
+    // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
+    ImFontConfig cfg;
+    cfg.OversampleH = 2;
+    cfg.OversampleV = 2;
+    cfg.PixelSnapH = true;
+
+    // 清除或不要呼叫 AddFontDefaultVector / Bitmap
+    ImFont* fontYaHei = io.Fonts->AddFontFromFileTTF(
+        "C:\\Windows\\Fonts\\msyh.ttc",
+        17.0f,
+        &cfg,
+        io.Fonts->GetGlyphRangesChineseFull() // 載入完整中文
+    );
+
+    if (fontYaHei != nullptr) {
+        io.FontDefault = fontYaHei; // 設置全局預設字體
+    }
+    else {
+        // 如果加載失敗的防禦方案：使用系統預設
+        io.Fonts->AddFontDefault();
+    }
+
+    // ==================================================================
 
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -312,31 +243,69 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             static int counter = 0;
             bool bOpen = true;
             ImGui::Begin("-AppBox-", &bOpen, win_flags);     
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+            //ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+            ImGui::Text(u8"帧率(%.0f FPS)", io.Framerate);
+
 
             int appIdx = 0;
-            for(auto a: gvApp)
-            { 
+            float fSize = 64;
+            iconSize = ImVec2(fSize, fSize);
+
+            ImGuiStyle& style = ImGui::GetStyle();
+
+            // 1. 計算一個完整按鈕所需的固定總寬度（包含按鈕內襯）
+            float buttonWidth = iconSize.x + style.FramePadding.x * 2.0f;
+
+            // 2. 取得當前視窗內容的可用總寬度
+            float windowWidth = ImGui::GetWindowContentRegionMax().x - ImGui::GetWindowContentRegionMin().x;
+
+            // 3. 計算最多能塞下幾個按鈕
+            int maxItemsPerRow = (int)((windowWidth + style.ItemSpacing.x) / (buttonWidth + style.ItemSpacing.x));
+            if (maxItemsPerRow < 1) maxItemsPerRow = 1;
+
+            // 4. 動態計算「橫向等距間距」
+            float dynamicSpacingX = style.ItemSpacing.x;
+            if (maxItemsPerRow > 1 && gvApp.size() >= (size_t)maxItemsPerRow)
+            {
+                float totalButtonsWidth = maxItemsPerRow * buttonWidth;
+                dynamicSpacingX = (windowWidth - totalButtonsWidth) / (maxItemsPerRow - 1);
+            }
+
+            // 5. 💡 關鍵：用 Style 統一注入橫向與縱向間距，讓 ImGui 自動處理行間距！
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(dynamicSpacingX, dynamicSpacingX));
+
+            for (size_t i = 0; i < gvApp.size(); ++i)
+            {
+                auto& a = gvApp[i];
+
                 char szName[64] = { 0 };
                 sprintf_s(szName, "btn%d", appIdx);
                 appIdx++;
-                // ImageButton: 图标+可选文字
+
+                // 6. 💡 核心排版：由 ImGui 決定換行，完全不使用 SetCursorPos！
+                int col = (int)(i % maxItemsPerRow);
+                if (i > 0 && col > 0)
+                {
+                    // 如果不是一行的第一個按鈕，就強行並排，並帶入我們計算好的動態間距
+                    ImGui::SameLine(0.0f, dynamicSpacingX);
+                }
+
+                // 7. 繪製 ImageButton
                 if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
                 {
-                    // 点击按钮，执行exe
                     ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
                 }
-                // 图标旁边叠加文字
-                ImGui::SameLine();
-                //ImGui::Text(exePathBuf);
+
+                // 8. 懸停 Tooltip
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("\xE8\xB7\xAF\xE5\xBE\x91\xEF\xBC\x9A %ls", a.exePathBuf);
+                }
             }
 
-
-
-
-
-
-
+            // 9. 💡 記得彈出剛才 Push 的樣式變數
+            ImGui::PopStyleVar();
+           
             ImGui::End();
 
             if (!bOpen)

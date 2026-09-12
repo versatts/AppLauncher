@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ImGuiStatic", "ImGuiStatic\
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DesktopAppBox", "DesktopAppBox\DesktopAppBox.vcxproj", "{26367610-2EFF-4A52-AAC6-28CCDCF05F40}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ttt", "ttt\ttt.vcxproj", "{E84173AA-7258-4CB9-9B92-5E995073304B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -51,6 +53,14 @@ Global
 		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Release|Win32.Build.0 = Release|Win32
 		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Release|x64.ActiveCfg = Release|x64
 		{26367610-2EFF-4A52-AAC6-28CCDCF05F40}.Release|x64.Build.0 = Release|x64
+		{E84173AA-7258-4CB9-9B92-5E995073304B}.Debug|Win32.ActiveCfg = Debug|Win32
+		{E84173AA-7258-4CB9-9B92-5E995073304B}.Debug|Win32.Build.0 = Debug|Win32
+		{E84173AA-7258-4CB9-9B92-5E995073304B}.Debug|x64.ActiveCfg = Debug|x64
+		{E84173AA-7258-4CB9-9B92-5E995073304B}.Debug|x64.Build.0 = Debug|x64
+		{E84173AA-7258-4CB9-9B92-5E995073304B}.Release|Win32.ActiveCfg = Release|Win32
+		{E84173AA-7258-4CB9-9B92-5E995073304B}.Release|Win32.Build.0 = Release|Win32
+		{E84173AA-7258-4CB9-9B92-5E995073304B}.Release|x64.ActiveCfg = Release|x64
+		{E84173AA-7258-4CB9-9B92-5E995073304B}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
