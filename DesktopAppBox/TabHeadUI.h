@@ -6,7 +6,7 @@
 #include "imgui_internal.h"
 #include <vector>
 #include <string>
-class TabHead
+class TabHeadUI
 {
 public:
 	void Render();

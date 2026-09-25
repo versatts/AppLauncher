@@ -5,110 +5,15 @@
 
 #include <shellapi.h> // 💡 確保有引入 ShellAPI 標頭檔
 
-#if 0
-ID3D11ShaderResourceView* LoadHighestResIconSRV(ID3D11Device* pDevice, const wchar_t* exePath, UINT& outW, UINT& outH)
+ResLoader::~ResLoader()
 {
-    // =========================================================================
-    // 🚀 核心新增：防禦檢查 ── 判斷目標路徑是否為「資料夾/目錄」
-    // =========================================================================
-    DWORD fileAttr = ::GetFileAttributesW(exePath);
-    if (fileAttr != INVALID_FILE_ATTRIBUTES && (fileAttr & FILE_ATTRIBUTE_DIRECTORY))
+    for (auto a : m_vRes)
     {
-        // 說明目標是一個真實的資料夾路徑！
-        SHFILEINFOW sfi = { 0 };
-        // 呼叫 SHGetFileInfoW 取得該資料夾在大圖標模式下的 HICON
-        DWORD_PTR result = ::SHGetFileInfoW(
-            exePath,
-            0,
-            &sfi,
-            sizeof(sfi),
-            SHGFI_ICON | SHGFI_LARGEICON // 👈 擷取大型圖標 (通常為 32x32 或系統指定尺寸)
-        );
-
-        if (result != 0 && sfi.hIcon)
-        {
-            int w = 0, h = 0;
-            // 完美對接您已經修復好 Alpha 通道全透明 Bug 的轉換函式
-            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, sfi.hIcon, w, h);
-
-            ::DestroyIcon(sfi.hIcon); // 💡 務必釋放 ShellAPI 產生的 HICON
-
-            outW = (UINT)w;
-            outH = (UINT)h;
-            return pSRV;
-        }
-        return nullptr;
+        a->Release();
     }
-
-    // =========================================================================
-    // 💡 原有攔截 ── 判斷是否為純 .ico 檔案 (保持不變)
-    // =========================================================================
-    size_t pathLen = wcslen(exePath);
-    if (pathLen > 4 && _wcsicmp(exePath + pathLen - 4, L".ico") == 0)
-    {
-        HICON hIcon = nullptr;
-        UINT iconId = 0;
-        UINT nExtracted = PrivateExtractIconsW(exePath, 0, 256, 256, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
-        if (nExtracted == 0 || !hIcon)
-        {
-            nExtracted = PrivateExtractIconsW(exePath, 0, 0, 0, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
-        }
-
-        if (hIcon)
-        {
-            int w = 0, h = 0;
-            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, hIcon, w, h);
-            DestroyIcon(hIcon);
-            outW = (UINT)w;
-            outH = (UINT)h;
-            return pSRV;
-        }
-        return nullptr;
-    }
-
-    // =========================================================================
-    // 💡 原有邏輯 ── 處理標準 .exe / .dll 內部資源 (保持不變)
-    // =========================================================================
-    std::vector<BYTE> iconBlob;
-    UINT width = 0, height = 0;
-
-    if (!LoadLargestIconResourceFromExe(exePath, iconBlob, width, height) || iconBlob.empty())
-    {
-        return nullptr;
-    }
-
-    bool isPng = false;
-    if (iconBlob.size() > 4)
-    {
-        if (iconBlob[0] == 0x89 && iconBlob[1] == 0x50 && iconBlob[2] == 0x4E && iconBlob[3] == 0x47)
-        {
-            isPng = true;
-        }
-    }
-
-    if (isPng)
-    {
-        return CreateSRVFromPngBlob(pDevice, iconBlob, outW, outH);
-    }
-    else
-    {
-        HICON hIcon = CreateIconFromResourceEx(iconBlob.data(), (DWORD)iconBlob.size(), TRUE, 0x00030000, width, height, LR_DEFAULTCOLOR);
-        if (hIcon)
-        {
-            int w = 0, h = 0;
-            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, hIcon, w, h);
-            DestroyIcon(hIcon);
-            outW = (UINT)w;
-            outH = (UINT)h;
-            return pSRV;
-        }
-    }
-
-    return nullptr;
 }
-#endif
 
-ID3D11ShaderResourceView* LoadHighestResIconSRV(ID3D11Device* pDevice, const wchar_t* exePath, UINT& outW, UINT& outH)
+ID3D11ShaderResourceView* ResLoader::LoadHighestResIconSRV(ID3D11Device* pDevice, const wchar_t* exePath, UINT& outW, UINT& outH)
 {
     if (!exePath || *exePath == L'\0') return nullptr;
 
@@ -231,7 +136,7 @@ ID3D11ShaderResourceView* LoadHighestResIconSRV(ID3D11Device* pDevice, const wch
 }
 
 
-ID3D11ShaderResourceView* CreateSRVFromPngBlob(ID3D11Device* pDevice, const std::vector<BYTE>& pngBlob, UINT& outW, UINT& outH)
+ID3D11ShaderResourceView* ResLoader::CreateSRVFromPngBlob(ID3D11Device* pDevice, const std::vector<BYTE>& pngBlob, UINT& outW, UINT& outH)
 {
     IWICImagingFactory* pFactory = nullptr;
     CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pFactory));
@@ -331,11 +236,12 @@ ID3D11ShaderResourceView* CreateSRVFromPngBlob(ID3D11Device* pDevice, const std:
     pStream->Release();
     pFactory->Release();
 
+    m_vRes.push_back(pSRV);
     return pSRV;
 }
 
 
-ID3D11ShaderResourceView* IconToD3D11SRV_Simple(ID3D11Device* pDevice, HICON hIcon, int& outW, int& outH)
+ID3D11ShaderResourceView* ResLoader::IconToD3D11SRV_Simple(ID3D11Device* pDevice, HICON hIcon, int& outW, int& outH)
 {
     ICONINFO iconInfo;
     if (!GetIconInfo(hIcon, &iconInfo)) return nullptr;
@@ -421,6 +327,7 @@ ID3D11ShaderResourceView* IconToD3D11SRV_Simple(ID3D11Device* pDevice, HICON hIc
     DeleteObject(iconInfo.hbmColor);
     DeleteObject(iconInfo.hbmMask);
 
+    m_vRes.push_back(pSRV);
     return pSRV;
 }
 
@@ -482,7 +389,7 @@ BOOL CALLBACK EnumGroupIconCallback_Universal(HMODULE hMod, LPCWSTR lpszType, LP
 
 // 從 exePath 讀取 RT_GROUP_ICON，選出尺寸最大圖標，輸出原始資源 blob
 // 返回 false 失敗；pBlob 輸出二進位，width/height 輸出圖標尺寸
-bool LoadLargestIconResourceFromExe(const wchar_t* exePath, std::vector<BYTE>& pBlob, UINT& width, UINT& height)
+bool ResLoader::LoadLargestIconResourceFromExe(const wchar_t* exePath, std::vector<BYTE>& pBlob, UINT& width, UINT& height)
 {
     HMODULE hModule = LoadLibraryExW(exePath, NULL, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
     if (!hModule)

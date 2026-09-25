@@ -15,7 +15,7 @@
 
 #include "link.h"
 #include "ResLoader.h"
-#include "TabHead.h"
+#include "TabHeadUI.h"
 #include <vector>
 #include <algorithm>
 
@@ -75,8 +75,8 @@ std::vector<ST_FOLDER> gvFolder;
 std::vector<ST_APP>* gpvApp = nullptr;
 int gCurTab = 0;
 std::vector<std::wstring> gvFolderName;
-TabHead gTab0;
-
+TabHeadUI gTab0;
+ResLoader gRes;
 bool IsPath(const std::string& inputStr)
 {
     if (inputStr.empty()) return false;
@@ -166,38 +166,11 @@ void MakeOneFolder(std::vector<std::wstring>& lnkList, ST_FOLDER& folder)
         {
             UINT w, h;
             // 💡 傳入 iconPath（如果是 Steam 會是快取的 .ico，如果是普通 EXE 會是 exe 自己的路徑）
-            item.iconSrv = LoadHighestResIconSRV(g_pd3dDevice, iconPath, w, h);
+            item.iconSrv = gRes.LoadHighestResIconSRV(g_pd3dDevice, iconPath, w, h);
 
-            // 如果從指定路徑載入高清資源失敗（例如某些特殊 URL 快捷方式沒快取圖標）
-            if (!item.iconSrv)
-            {
-                // 降級備用方案：使用傳統的系統圖標提取
-                HICON hIco = ExtractExeMainIcon(iconPath);
-                if (hIco) {
-                    int sw = 0, sh = 0;
-                    item.iconSrv = IconToD3D11SRV_Simple(g_pd3dDevice, hIco, sw, sh);
-                    DestroyIcon(hIco);
-                }
-            }
             folder.vApp.push_back(item);
         }
     }
-}
-
-// 專門用來尋找桌面壁紙夾層的回呼函式
-BOOL CALLBACK EnumWallpaperWindowsProc(HWND hwnd, LPARAM lParam)
-{
-    // 檢查這個視窗內部是否包含桌面圖標層 "SHELLDLL_DefView"
-    HWND hShellView = ::FindWindowExW(hwnd, NULL, L"SHELLDLL_DefView", NULL);
-    if (hShellView != NULL)
-    {
-        // 💡 找到了！在 Windows 架構中，真正拿來當桌布背景、且絕對不擋圖標的，
-        // 就是緊跟在這個包含圖標層的視窗「後方」的下一個同級 "WorkerW" 視窗
-        HWND* pResultHwnd = (HWND*)lParam;
-        *pResultHwnd = ::FindWindowExW(NULL, hwnd, L"WorkerW", NULL);
-        return FALSE; // 找到了就停止列舉，立刻退出
-    }
-    return TRUE; // 沒找到就繼續找下一個視窗
 }
 // Main code
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
@@ -218,8 +191,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // Create application window
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui-001", nullptr };
     ::RegisterClassExW(&wc);
-#define NEW_PLAN 1
-#if NEW_PLAN
     // ==================== 🚀 終極壁紙相容方案：可交互、不擋圖標版 ====================
      // 💡 核心修復一：移除 WS_EX_TRANSPARENT（滑鼠穿透），這樣按鈕和 Tab 就能正常點擊交互了！
      // 💡 核心修復二：保留 WS_EX_LAYERED 確保視窗跨越系統純色裁剪優化，100% 正常繪製
@@ -251,66 +222,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // 初始將視窗推至最底部（與壁紙同高，絕對不遮擋桌面圖標）
     ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     // ============================================================================
-#else
- HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"", WS_POPUP | /*WS_OVERLAPPEDWINDOW | */WS_CLIPCHILDREN
-        , (cx - g_WinW) / 2, (cy - g_WinH) / 2, (int)(g_WinW * main_scale), (int)(g_WinH * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
-
-#endif
 #define ENABLE_VIEWPORTS 1
 
-#if 0
-    // ==================== 🚀 終極壁紙嵌入：EnumWindows 萬能相容版 ====================
-       // 第一步：發送 0x052C 神秘訊息，強迫系統生成桌布層
-    HWND hProgman = ::FindWindowW(L"Progman", L"Program Manager");
-    if (hProgman)
-    {
-        ::SendMessageTimeoutW(hProgman, 0x052C, 0, 0, SMTO_NORMAL, 1000, NULL);
-    }
-
-    // 第二步：呼叫萬能的 EnumWindows 進行全域視窗列舉，精確捕捉目標
-    HWND hWallpaperTargetW = NULL;
-    ::EnumWindows(EnumWallpaperWindowsProc, (LPARAM)&hWallpaperTargetW);
-
-    // 第三步：【純色桌面特有降級防禦】
-    // 如果 Enum 完發現 hWallpaperTargetW 依舊為空，說明系統在純色模式下把所有東西都壓在 Progman 裡
-    // 此時我們就直接將父視窗指定為 hProgman 即可
-    if (!hWallpaperTargetW)
-    {
-        hWallpaperTargetW = hProgman;
-    }
-
-    // 第四步：執行安全的子視窗化轉換與座標對齊
-    if (hWallpaperTargetW)
-    {
-        // 賦予合法的子視窗 Control ID（徹底防止 Windows 阻斷繪製訊息）
-        ::SetWindowLongPtrW(hwnd, GWLP_ID, (LONG_PTR)1001);
-
-        // 轉換樣式為合法的子視窗
-        DWORD style = ::GetWindowLongW(hwnd, GWL_STYLE);
-        style &= ~WS_POPUP;
-        style |= WS_CHILD;
-        ::SetWindowLongW(hwnd, GWL_STYLE, style);
-
-        // 💥 將您的視窗強行塞入我們定位出來的萬能壁紙容器中
-        ::SetParent(hwnd, hWallpaperTargetW);
-
-        // 重新對齊物理寬高與相對坐標
-        int targetW = (int)(g_WinW * main_scale);
-        int targetH = (int)(g_WinH * main_scale);
-        int targetX = (cx - targetW) / 2;
-        int targetY = (cy - targetH) / 2;
-
-        ::MoveWindow(hwnd, targetX, targetY, targetW, targetH, TRUE);
-
-        // 💡 如果最終去到了 Progman，需要強制下一筆 HWND_BOTTOM 確保不擋圖標
-        if (hWallpaperTargetW == hProgman)
-        {
-            ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        }
-    }
-    // ============================================================================
-
-#endif
 
     // Initialize Direct3D
     if (!CreateDeviceD3D(hwnd))
@@ -449,7 +362,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // 清除或不要呼叫 AddFontDefaultVector / Bitmap
     ImFont* fontYaHei = io.Fonts->AddFontFromFileTTF(
         "C:\\Windows\\Fonts\\msyh.ttc",
-        17.0f,
+        20.0f,
         &cfg,
         io.Fonts->GetGlyphRangesChineseFull() // 載入完整中文
     );
@@ -704,17 +617,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ::DestroyWindow(hwnd);
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
 
-    for (auto b : gvFolder)
-    {
-        for (auto a : b.vApp)
-        {
-            if (a.iconSrv)
-            {
-                a.iconSrv->Release();
-                a.iconSrv = nullptr;
-            }
-        }
-    }
     CoUninitialize();
     return 0;
 }

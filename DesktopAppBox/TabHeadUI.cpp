@@ -1,6 +1,6 @@
-﻿#include "TabHead.h"
+﻿#include "TabHeadUI.h"
 #include <windows.h>
-void TabHead::Render()
+void TabHeadUI::Render()
 {
     if (!folders || !selectedTabIdx)
     {

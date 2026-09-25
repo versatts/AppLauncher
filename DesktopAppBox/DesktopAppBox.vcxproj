@@ -149,16 +149,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="FolderUI.h" />
     <ClInclude Include="link.h" />
     <ClInclude Include="monitor.h" />
     <ClInclude Include="ResLoader.h" />
-    <ClInclude Include="TabHead.h" />
+    <ClInclude Include="TabHeadUI.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="FolderUI.cpp" />
     <ClCompile Include="link.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ResLoader.cpp" />
-    <ClCompile Include="TabHead.cpp" />
+    <ClCompile Include="TabHeadUI.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.txt" />
