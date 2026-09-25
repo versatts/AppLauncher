@@ -573,8 +573,8 @@ void InitImGuiContext(float fScale)
 
     // 清除或不要呼叫 AddFontDefaultVector / Bitmap
     ImFont* fontYaHei = io.Fonts->AddFontFromFileTTF(
-        "C:\\Windows\\Fonts\\msyh.ttc",
-        20.0f,
+        "C:\\Windows\\Fonts\\msyhbd.ttc",
+        18.0f,
         &cfg,
         io.Fonts->GetGlyphRangesChineseFull() // 載入完整中文
     );

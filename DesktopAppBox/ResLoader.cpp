@@ -391,7 +391,7 @@ BOOL CALLBACK EnumGroupIconCallback_Universal(HMODULE hMod, LPCWSTR lpszType, LP
 // 返回 false 失敗；pBlob 輸出二進位，width/height 輸出圖標尺寸
 bool ResLoader::LoadLargestIconResourceFromExe(const wchar_t* exePath, std::vector<BYTE>& pBlob, UINT& width, UINT& height)
 {
-    HMODULE hModule = LoadLibraryExW(exePath, NULL, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+    HMODULE hModule = LoadLibraryExW(exePath, NULL, LOAD_LIBRARY_AS_DATAFILE/* | LOAD_LIBRARY_AS_IMAGE_RESOURCE*/);
     if (!hModule)
         return false;
 

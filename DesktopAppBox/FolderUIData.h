@@ -16,6 +16,7 @@ struct ST_APP
 {
     ID3D11ShaderResourceView* iconSrv;
     WCHAR exePathBuf[INTERNET_MAX_URL_LENGTH] = { 0 };
+    std::string sDisplay;
 };
 
 struct ST_FOLDER
@@ -34,6 +35,7 @@ public:
     std::vector<std::wstring> gvFolderName;
 
     int gCurTab = 0;
+    bool m_bShowName = true;
 private:
     void MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::vector<std::wstring>& lnkList, ST_FOLDER& folder);
 };

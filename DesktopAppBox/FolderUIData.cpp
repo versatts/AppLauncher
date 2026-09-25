@@ -40,16 +40,28 @@ void FolderUIData::MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::
         // 判斷是否為 Steam 的 .url 快捷方式
         if (path.size() > 4 && _wcsicmp(path.c_str() + path.size() - 4, L".url") == 0)
         {
+            std::wstring sIcon;
+            if (CheckSpecificIcon(path, sIcon))
+            {
+                wcsncpy_s(iconPath, sIcon.c_str(), INTERNET_MAX_URL_LENGTH);
+                resolved = true;
+            }
             // 解析 URL 機制
-            if (ResolveUrlTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH, iconPath, MAX_PATH))
+            else if (ResolveUrlTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH, iconPath, MAX_PATH))
             {
                 resolved = true;
             }
         }
         else
         {
+            std::wstring sIcon;
+            if (CheckSpecificIcon(path, sIcon))
+            {
+                wcsncpy_s(iconPath, sIcon.c_str(), INTERNET_MAX_URL_LENGTH);
+                resolved = true;
+            }
             // 原有的 .lnk 解析機制
-            if (ResolveLnkTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH))
+            else if (ResolveLnkTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH))
             {
                 // 標準 exe 的圖標路徑就是它自己
                 wcsncpy_s(iconPath, item.exePathBuf, INTERNET_MAX_URL_LENGTH);
@@ -63,6 +75,7 @@ void FolderUIData::MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::
             // 💡 傳入 iconPath（如果是 Steam 會是快取的 .ico，如果是普通 EXE 會是 exe 自己的路徑）
             item.iconSrv = pRL->LoadHighestResIconSRV(pd3dDevice, iconPath, w, h);
 
+            item.sDisplay = GetUtf8FileNameFromWstring(path);
             folder.vApp.push_back(item);
         }
     }

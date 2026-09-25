@@ -1,11 +1,67 @@
 ﻿#include "link.h"
 #include <intshcut.h>
 #include <shlwapi.h>
-
+#include <filesystem>
+#include <tchar.h>
 #pragma comment(lib, "Shlwapi.lib")
 
+bool CheckSpecificIcon(const std::wstring& exePath, std::wstring& sIcon)
+{
+    sIcon = exePath;
+    sIcon = sIcon.substr(0, sIcon.length() - 4);
+    sIcon += L".ico";
 
+    // 取得檔案屬性
+    DWORD dwAttrib = GetFileAttributesW(sIcon.c_str());
 
+    // 1. 如果回傳 INVALID_FILE_ATTRIBUTES，代表檔案不存在（或路徑無效、無權限訪問）
+    // 2. 確保該路徑是一個「檔案」，而不是一個「資料夾 (Directory)」
+    return (dwAttrib != INVALID_FILE_ATTRIBUTES &&
+        !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
+}
+
+/**
+ * @brief 將 wstring 的完整路徑轉為 UTF-8 編碼的 string 檔名（不含副檔名/後綴）
+ * @param wpath 寬字元的檔案路徑 (例如: L"C:\\資料夾\\測試檔案.tar.gz")
+ * @return std::string UTF-8 編碼的主檔名 (例如: "測試檔案.tar")
+ */
+std::string GetUtf8FileNameFromWstring(const std::wstring& wpath) {
+    // 1. 使用 std::filesystem::path::stem() 獲取不含最後一個後綴的寬字串
+    std::wstring wstem = std::filesystem::path(wpath).stem().wstring();
+
+    if (wstem.empty()) {
+        return "";
+    }
+
+    // 2. 計算轉換為 UTF-8 所需的緩衝區大小
+    int size_needed = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        wstem.c_str(),
+        static_cast<int>(wstem.length()),
+        nullptr,
+        0,
+        nullptr, nullptr
+    );
+
+    if (size_needed <= 0) {
+        return "";
+    }
+
+    // 3. 配置空間並執行實際轉換
+    std::string utf8_stem(size_needed, 0);
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        wstem.c_str(),
+        static_cast<int>(wstem.length()),
+        &utf8_stem[0],  // 傳入緩衝區首地址
+        size_needed,
+        nullptr, nullptr
+    );
+
+    return utf8_stem;
+}
 // 获取当前exe所在目录下所有 *.lnk 文件的完整路径
 // subDirName: 要進入的子目錄名（若為空 L""，則在 lnk 根目錄進行搜尋）
 // outSubDirList: 輸出參數，返回當前搜尋目錄內所包含的資料夾名稱列表
@@ -80,37 +136,6 @@ std::vector<std::wstring> EnumLnkFilesInAppDir( const std::wstring& subDirName, 
 
     return fileResult;
 }
-#if 0
-bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize)
-{
-    *outExePath = 0;
-    IShellLinkW* pShellLink = nullptr;
-    IPersistFile* pPersistFile = nullptr;
-
-    HRESULT hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLinkW, (void**)&pShellLink);
-    if (FAILED(hr)) return false;
-
-    hr = pShellLink->QueryInterface(IID_IPersistFile, (void**)&pPersistFile);
-    if (FAILED(hr)) { pShellLink->Release(); return false; }
-
-    // 加载lnk文件
-    hr = pPersistFile->Load(lnkFullPath, STGM_READ);
-    if (SUCCEEDED(hr))
-    {
-        // 解析链接（SLR_NOTRACK：不启用文件跟踪，避免弹窗）
-        hr = pShellLink->Resolve(nullptr, SLR_NO_UI | SLR_NOTRACK);
-        if (SUCCEEDED(hr))
-        {
-            // 获取目标路径
-            hr = pShellLink->GetPath(outExePath, outPathBufSize, nullptr, SLGP_UNCPRIORITY);
-        }
-    }
-
-    if (pPersistFile) pPersistFile->Release();
-    if (pShellLink) pShellLink->Release();
-    return SUCCEEDED(hr);
-}
-#endif
 bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize)
 {
     // 💥 嚴格防禦：防止傳入空指標或過小的緩衝區

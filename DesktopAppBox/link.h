@@ -8,6 +8,9 @@
 #pragma comment(lib,"comsuppw.lib")
 #pragma comment(lib,"d3d11.lib")
 
+bool CheckSpecificIcon(const std::wstring& exePath, std::wstring& sIcon);
+
+std::string GetUtf8FileNameFromWstring(const std::wstring& wpath);
 
 std::vector<std::wstring> EnumLnkFilesInAppDir(const std::wstring& subDirName, std::vector<std::wstring>& outSubDirList);
 
