@@ -12,12 +12,14 @@
 #include "imgui_internal.h"
 #include <d3d11.h>
 #include <tchar.h>
+#include <vector>
+#include <algorithm>
 
 #include "link.h"
 #include "ResLoader.h"
 #include "TabHeadUI.h"
-#include <vector>
-#include <algorithm>
+#include "FolderUIData.h"
+#include "FolderUI.h"
 
 // Data
 static ID3D11Device*            g_pd3dDevice = nullptr;
@@ -54,124 +56,12 @@ HWND gHwnd;
 int g_WinW = 600;
 int g_WinH = 400;
 
-// 定義符合網路標準的網頁 URL 最大長度 (2048)
-#ifndef INTERNET_MAX_URL_LENGTH
-#define INTERNET_MAX_URL_LENGTH 2048
-#endif
+FolderUIData gFUD;
+FolderUI gFU;
 
-struct ST_APP
-{
-    ID3D11ShaderResourceView* iconSrv;
-    WCHAR exePathBuf[INTERNET_MAX_URL_LENGTH] = { 0 };
-};
-
-struct ST_FOLDER
-{
-    std::vector<ST_APP> vApp;
-    std::wstring sName;
-};
-
-std::vector<ST_FOLDER> gvFolder;
-std::vector<ST_APP>* gpvApp = nullptr;
-int gCurTab = 0;
-std::vector<std::wstring> gvFolderName;
 TabHeadUI gTab0;
 ResLoader gRes;
-bool IsPath(const std::string& inputStr)
-{
-    if (inputStr.empty()) return false;
 
-    // 1. 🚀 核心升級：優先進行網路 UNC 路徑結構判斷 (例如 \\192.168.1.1\mydir)
-    // 檢查是否以雙反斜線 "\\ " 開頭
-    if (inputStr.size() >= 2 && inputStr[0] == '\\' && inputStr[1] == '\\')
-    {
-        // 💡 網路路徑防禦：
-        // 只要是 \\ 開頭，不管尾端有沒有帶反斜線，它在本質上代表的都是一個「伺服器共享資料夾」或「目錄」
-        // 我們直接將其視為路徑，這樣即使網路斷線或需要密碼，也絕對不會誤判或卡死！
-        return true;
-    }
-
-    // 2. 💡 本地路徑攔截：處理末尾帶有斜槓的明確目錄 (例如 D:\abc\)
-    char lastChar = inputStr.back();
-    if (lastChar == '\\' || lastChar == '/')
-    {
-        return true;
-    }
-
-    // 3. 實體檔案系統檢查 (主要針對本地磁碟如 D:\mydir)
-    DWORD attributes = ::GetFileAttributesA(inputStr.c_str());
-
-    if (attributes != INVALID_FILE_ATTRIBUTES)
-    {
-        // 檢查是否含有資料夾旗標
-        if (attributes & FILE_ATTRIBUTE_DIRECTORY)
-        {
-            return true;
-        }
-    }
-
-    return false; // 代表它是常規檔案 (例如 .exe, .txt) 或無效路徑
-}
-#if 0
-bool IsPath(const std::string& inputStr)
-{
-    // Retrieve the file attributes from Windows
-    DWORD attributes = ::GetFileAttributesA(inputStr.c_str());
-
-    // INVALID_FILE_ATTRIBUTES means the path does not exist or is inaccessible
-    if (attributes == INVALID_FILE_ATTRIBUTES)
-    {
-        return false;
-    }
-
-    // Check if the FILE_ATTRIBUTE_DIRECTORY flag is present
-    if (attributes & FILE_ATTRIBUTE_DIRECTORY)
-    {
-        return true; // It is a path/directory
-    }
-
-    return false; // It is a regular file
-}
-#endif
-
-void MakeOneFolder(std::vector<std::wstring>& lnkList, ST_FOLDER& folder)
-{
-    for (const auto& path : lnkList)
-    {
-        ST_APP item;
-        bool resolved = false;
-        WCHAR iconPath[MAX_PATH] = { 0 };
-
-        // 判斷是否為 Steam 的 .url 快捷方式
-        if (path.size() > 4 && _wcsicmp(path.c_str() + path.size() - 4, L".url") == 0)
-        {
-            // 解析 URL 機制
-            if (ResolveUrlTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH, iconPath, MAX_PATH))
-            {
-                resolved = true;
-            }
-        }
-        else
-        {
-            // 原有的 .lnk 解析機制
-            if (ResolveLnkTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH))
-            {
-                // 標準 exe 的圖標路徑就是它自己
-                wcsncpy_s(iconPath, item.exePathBuf, INTERNET_MAX_URL_LENGTH);
-                resolved = true;
-            }
-        }
-
-        if (resolved)
-        {
-            UINT w, h;
-            // 💡 傳入 iconPath（如果是 Steam 會是快取的 .ico，如果是普通 EXE 會是 exe 自己的路徑）
-            item.iconSrv = gRes.LoadHighestResIconSRV(g_pd3dDevice, iconPath, w, h);
-
-            folder.vApp.push_back(item);
-        }
-    }
-}
 // Main code
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -329,30 +219,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
-    std::wstring sDir;
-    std::vector<std::wstring> vFolder;
-    auto lnkList = EnumLnkFilesInAppDir(sDir, vFolder);
+    gFUD.Init(g_pd3dDevice, &gRes);
 
-    ST_FOLDER folder0;
-    folder0.sName = _T("Useful");
-    MakeOneFolder(lnkList, folder0);
-    gvFolder.push_back(folder0);
-    gvFolderName.push_back(folder0.sName);
-    gpvApp = &(gvFolder[0].vApp);
-    gTab0.selectedTabIdx = &gCurTab;
-    gTab0.folders = &gvFolderName;
+    gTab0.selectedTabIdx = &(gFUD.gCurTab);
+    gTab0.folders = &(gFUD.gvFolderName);
 
-    for (auto fx : vFolder)
-    {
-        ST_FOLDER folderx;
-        folderx.sName = fx;
-        std::vector<std::wstring> vEmpty;
-        auto lnkList = EnumLnkFilesInAppDir(fx, vEmpty);
-        MakeOneFolder(lnkList, folderx);
-        gvFolder.push_back(folderx);
-        gvFolderName.push_back(folderx.sName);
-    }
-
+   
     // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
     ImFontConfig cfg;
     cfg.OversampleH = 2;
@@ -480,78 +352,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                // ImGui::Text(u8"帧率(%.0f FPS)", io.Framerate);
 
                 gTab0.Render();
-                gpvApp = &(gvFolder[gCurTab].vApp);
 
-                if (gpvApp)
-                {
-                    int appIdx = 0;
-                    float fSize = 64;
-                    iconSize = ImVec2(fSize, fSize);
-
-                    // 1. 計算一個完整按鈕所需的固定總寬度（包含按鈕內襯）
-                    float buttonWidth = iconSize.x + style.FramePadding.x * 2.0f;
-
-                    // 2. 取得當前視窗內容的可用總寬度
-                    float windowWidth = ImGui::GetWindowContentRegionMax().x - ImGui::GetWindowContentRegionMin().x;
-
-                    // 3. 計算最多能塞下幾個按鈕
-                    int maxItemsPerRow = (int)((windowWidth + style.ItemSpacing.x) / (buttonWidth + style.ItemSpacing.x));
-                    if (maxItemsPerRow < 1) maxItemsPerRow = 1;
-
-                    // 4. 動態計算「橫向等距間距」
-                    float dynamicSpacingX = style.ItemSpacing.x;
-                    if (maxItemsPerRow > 1 && gpvApp->size() >= (size_t)maxItemsPerRow)
-                    {
-                        float totalButtonsWidth = maxItemsPerRow * buttonWidth;
-                        dynamicSpacingX = (windowWidth - totalButtonsWidth) / (maxItemsPerRow - 1);
-                    }
-
-                    // 5. 💡 關鍵：用 Style 統一注入橫向與縱向間距，讓 ImGui 自動處理行間距！
-                    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(dynamicSpacingX, dynamicSpacingX));
-
-                    for (size_t i = 0; i < gpvApp->size(); ++i)
-                    {
-                        auto& a = (*gpvApp)[i];
-
-                        char szName[64] = { 0 };
-                        sprintf_s(szName, "btn%d", appIdx);
-                        appIdx++;
-
-                        // 6. 💡 核心排版：由 ImGui 決定換行，完全不使用 SetCursorPos！
-                        int col = (int)(i % maxItemsPerRow);
-                        if (i > 0 && col > 0)
-                        {
-                            // 如果不是一行的第一個按鈕，就強行並排，並帶入我們計算好的動態間距
-                            ImGui::SameLine(0.0f, dynamicSpacingX);
-                        }
-
-                        // 7. 繪製 ImageButton
-                        {
-                            if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
-                            {
-                                ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
-                            }
-                        }
-
-                        // 8. 懸停 Tooltip
-                        if (ImGui::IsItemHovered())
-                        {
-                            std::string sTip;
-                            int size_needed = WideCharToMultiByte(CP_UTF8, 0, a.exePathBuf, -1, NULL, 0, NULL, NULL);
-                            if (size_needed > 0) {
-                                sTip.resize(size_needed - 1);
-                                WideCharToMultiByte(CP_UTF8, 0, a.exePathBuf, -1, &sTip[0], size_needed, NULL, NULL);
-                            }
-                            if (IsPath(sTip))
-                            {
-                                ImGui::SetTooltip(sTip.c_str());
-                            }
-                        }
-                    }
-
-                    // 9. 💡 記得彈出剛才 Push 的樣式變數
-                    ImGui::PopStyleVar();
-                }
+                gFU.Render(hwnd, gFUD);
             }
 
             ImGui::End();

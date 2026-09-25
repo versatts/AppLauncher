@@ -11,6 +11,7 @@
     <ClInclude Include="ResLoader.h" />
     <ClInclude Include="TabHeadUI.h" />
     <ClInclude Include="FolderUI.h" />
+    <ClInclude Include="FolderUIData.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -20,6 +21,7 @@
     <ClCompile Include="ResLoader.cpp" />
     <ClCompile Include="TabHeadUI.cpp" />
     <ClCompile Include="FolderUI.cpp" />
+    <ClCompile Include="FolderUIData.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.txt" />
