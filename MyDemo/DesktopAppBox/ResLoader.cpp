@@ -5,6 +5,7 @@
 
 #include <shellapi.h> // 💡 確保有引入 ShellAPI 標頭檔
 
+#if 0
 ID3D11ShaderResourceView* LoadHighestResIconSRV(ID3D11Device* pDevice, const wchar_t* exePath, UINT& outW, UINT& outH)
 {
     // =========================================================================
@@ -37,6 +38,129 @@ ID3D11ShaderResourceView* LoadHighestResIconSRV(ID3D11Device* pDevice, const wch
             return pSRV;
         }
         return nullptr;
+    }
+
+    // =========================================================================
+    // 💡 原有攔截 ── 判斷是否為純 .ico 檔案 (保持不變)
+    // =========================================================================
+    size_t pathLen = wcslen(exePath);
+    if (pathLen > 4 && _wcsicmp(exePath + pathLen - 4, L".ico") == 0)
+    {
+        HICON hIcon = nullptr;
+        UINT iconId = 0;
+        UINT nExtracted = PrivateExtractIconsW(exePath, 0, 256, 256, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
+        if (nExtracted == 0 || !hIcon)
+        {
+            nExtracted = PrivateExtractIconsW(exePath, 0, 0, 0, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
+        }
+
+        if (hIcon)
+        {
+            int w = 0, h = 0;
+            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, hIcon, w, h);
+            DestroyIcon(hIcon);
+            outW = (UINT)w;
+            outH = (UINT)h;
+            return pSRV;
+        }
+        return nullptr;
+    }
+
+    // =========================================================================
+    // 💡 原有邏輯 ── 處理標準 .exe / .dll 內部資源 (保持不變)
+    // =========================================================================
+    std::vector<BYTE> iconBlob;
+    UINT width = 0, height = 0;
+
+    if (!LoadLargestIconResourceFromExe(exePath, iconBlob, width, height) || iconBlob.empty())
+    {
+        return nullptr;
+    }
+
+    bool isPng = false;
+    if (iconBlob.size() > 4)
+    {
+        if (iconBlob[0] == 0x89 && iconBlob[1] == 0x50 && iconBlob[2] == 0x4E && iconBlob[3] == 0x47)
+        {
+            isPng = true;
+        }
+    }
+
+    if (isPng)
+    {
+        return CreateSRVFromPngBlob(pDevice, iconBlob, outW, outH);
+    }
+    else
+    {
+        HICON hIcon = CreateIconFromResourceEx(iconBlob.data(), (DWORD)iconBlob.size(), TRUE, 0x00030000, width, height, LR_DEFAULTCOLOR);
+        if (hIcon)
+        {
+            int w = 0, h = 0;
+            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, hIcon, w, h);
+            DestroyIcon(hIcon);
+            outW = (UINT)w;
+            outH = (UINT)h;
+            return pSRV;
+        }
+    }
+
+    return nullptr;
+}
+#endif
+
+ID3D11ShaderResourceView* LoadHighestResIconSRV(ID3D11Device* pDevice, const wchar_t* exePath, UINT& outW, UINT& outH)
+{
+    if (!exePath || *exePath == L'\0') return nullptr;
+
+    // =========================================================================
+    // 🚀 核心升級：同時支援「本地目錄 (D:\mydir)」與「網路 UNC 路徑 (\\192.168.1.1\mydir)」
+    // =========================================================================
+    DWORD fileAttr = ::GetFileAttributesW(exePath);
+
+    // 檢查 1：是否為標準本地/網路資料夾
+    bool isDirectory = (fileAttr != INVALID_FILE_ATTRIBUTES && (fileAttr & FILE_ATTRIBUTE_DIRECTORY));
+
+    // 檢查 2：是否為網路 UNC 路徑結構 (以 \\ 開頭且非單純檔案)
+    // 💡 即使 GetFileAttributesW 因為權限或網路暫時斷開返回失敗，只要是 \\ 開頭我們就判定它是網路目錄
+    bool isNetworkPath = (exePath[0] == L'\\' && exePath[1] == L'\\');
+
+    if (isDirectory || isNetworkPath)
+    {
+        SHFILEINFOW sfi = { 0 };
+        DWORD flags = SHGFI_ICON | SHGFI_LARGEICON;
+
+        // 💥 【核心安全防禦】
+        // 如果 GetFileAttributesW 失敗（代表網路不通或無權限），
+        // 加上 SHGFI_USEFILEATTRIBUTES 可以強迫 Windows 走「虛擬緩衝解析」，
+        // 依據 FILE_ATTRIBUTE_DIRECTORY 直接秒回精美的網路資料夾圖標，100% 絕不卡死介面！
+        if (fileAttr == INVALID_FILE_ATTRIBUTES)
+        {
+            flags |= SHGFI_USEFILEATTRIBUTES;
+        }
+
+        DWORD_PTR result = ::SHGetFileInfoW(
+            exePath,
+            FILE_ATTRIBUTE_DIRECTORY, // 配合 SHGFI_USEFILEATTRIBUTES 使用的虛擬屬性
+            &sfi,
+            sizeof(sfi),
+            flags
+        );
+
+        if (result != 0 && sfi.hIcon)
+        {
+            int w = 0, h = 0;
+            // 完美對接您已經修復好 Alpha 通道全透明 Bug 的轉換函式
+            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, sfi.hIcon, w, h);
+
+            ::DestroyIcon(sfi.hIcon); // 💡 務必釋放 ShellAPI 產生的 HICON
+
+            outW = (UINT)w;
+            outH = (UINT)h;
+            return pSRV;
+        }
+
+        // 如果是網路路徑但上面沒撈成功，做最後的降級保底處理
+        if (isNetworkPath) return nullptr;
     }
 
     // =========================================================================

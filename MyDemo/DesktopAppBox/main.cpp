@@ -54,10 +54,15 @@ HWND gHwnd;
 int g_WinW = 600;
 int g_WinH = 400;
 
+// 定義符合網路標準的網頁 URL 最大長度 (2048)
+#ifndef INTERNET_MAX_URL_LENGTH
+#define INTERNET_MAX_URL_LENGTH 2048
+#endif
+
 struct ST_APP
 {
     ID3D11ShaderResourceView* iconSrv;
-    WCHAR exePathBuf[MAX_PATH] = { 0 };
+    WCHAR exePathBuf[INTERNET_MAX_URL_LENGTH] = { 0 };
 };
 
 struct ST_FOLDER
@@ -72,6 +77,42 @@ int gCurTab = 0;
 std::vector<std::wstring> gvFolderName;
 TabHead gTab0;
 
+bool IsPath(const std::string& inputStr)
+{
+    if (inputStr.empty()) return false;
+
+    // 1. 🚀 核心升級：優先進行網路 UNC 路徑結構判斷 (例如 \\192.168.1.1\mydir)
+    // 檢查是否以雙反斜線 "\\ " 開頭
+    if (inputStr.size() >= 2 && inputStr[0] == '\\' && inputStr[1] == '\\')
+    {
+        // 💡 網路路徑防禦：
+        // 只要是 \\ 開頭，不管尾端有沒有帶反斜線，它在本質上代表的都是一個「伺服器共享資料夾」或「目錄」
+        // 我們直接將其視為路徑，這樣即使網路斷線或需要密碼，也絕對不會誤判或卡死！
+        return true;
+    }
+
+    // 2. 💡 本地路徑攔截：處理末尾帶有斜槓的明確目錄 (例如 D:\abc\)
+    char lastChar = inputStr.back();
+    if (lastChar == '\\' || lastChar == '/')
+    {
+        return true;
+    }
+
+    // 3. 實體檔案系統檢查 (主要針對本地磁碟如 D:\mydir)
+    DWORD attributes = ::GetFileAttributesA(inputStr.c_str());
+
+    if (attributes != INVALID_FILE_ATTRIBUTES)
+    {
+        // 檢查是否含有資料夾旗標
+        if (attributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            return true;
+        }
+    }
+
+    return false; // 代表它是常規檔案 (例如 .exe, .txt) 或無效路徑
+}
+#if 0
 bool IsPath(const std::string& inputStr)
 {
     // Retrieve the file attributes from Windows
@@ -91,6 +132,7 @@ bool IsPath(const std::string& inputStr)
 
     return false; // It is a regular file
 }
+#endif
 
 void MakeOneFolder(std::vector<std::wstring>& lnkList, ST_FOLDER& folder)
 {
@@ -104,7 +146,7 @@ void MakeOneFolder(std::vector<std::wstring>& lnkList, ST_FOLDER& folder)
         if (path.size() > 4 && _wcsicmp(path.c_str() + path.size() - 4, L".url") == 0)
         {
             // 解析 URL 機制
-            if (ResolveUrlTarget(path.c_str(), item.exePathBuf, MAX_PATH, iconPath, MAX_PATH))
+            if (ResolveUrlTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH, iconPath, MAX_PATH))
             {
                 resolved = true;
             }
@@ -112,10 +154,10 @@ void MakeOneFolder(std::vector<std::wstring>& lnkList, ST_FOLDER& folder)
         else
         {
             // 原有的 .lnk 解析機制
-            if (ResolveLnkTarget(path.c_str(), item.exePathBuf, MAX_PATH))
+            if (ResolveLnkTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH))
             {
                 // 標準 exe 的圖標路徑就是它自己
-                wcsncpy_s(iconPath, item.exePathBuf, MAX_PATH);
+                wcsncpy_s(iconPath, item.exePathBuf, INTERNET_MAX_URL_LENGTH);
                 resolved = true;
             }
         }
