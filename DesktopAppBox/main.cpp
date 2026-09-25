@@ -37,7 +37,6 @@ void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-HWND gHwnd;
 int g_WinW = 600;
 int g_WinH = 400;
 
@@ -47,6 +46,40 @@ FolderUI gFU;
 TabHeadUI gTab0;
 ResLoader gRes;
 
+// 確保全域或靜態變數可以被存取
+static int g_OSWinX = 100, g_OSWinY = 100, g_OSWinW = 0, g_OSWinH = 0;
+static HWND g_hwnd = nullptr; // 💡 用來儲存你建立好的 HWND
+
+// 💡 寫一個專門的初始化註冊函式，在 ImGui::CreateContext() 之後立刻呼叫
+void RegisterWin32IniHandler()
+{
+    ImGuiSettingsHandler ini_handler;
+    ini_handler.TypeName = "Win32_HostWindow";
+    ini_handler.TypeHash = ImHashStr("Win32_HostWindow");
+
+    // 💡 關鍵修正：補上 ReadOpenFn，防止 ImGui 呼叫空指標崩潰
+    ini_handler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, const char* name) -> void* {
+        // 只要這區塊的名字是我們支援的（例如 Settings），就回傳一個非空指標代表允許讀取
+        if (strcmp(name, "Settings") == 0) {
+            return (void*)handler;
+        }
+        return nullptr;
+        };
+
+    // 讀取每一行資料的回呼
+    ini_handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler*, void* entry, const char* line) {
+        // 這裡的 entry 就是上面 ReadOpenFn 回傳的指標，這裡不需要特別操作它
+        sscanf_s(line, "Pos=%d,%d Size=%d,%d", &g_OSWinX, &g_OSWinY, &g_OSWinW, &g_OSWinH);
+        };
+
+    // 寫入 ini 檔時的回呼
+    ini_handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf) {
+        buf->appendf("[%s][%s]\n", handler->TypeName, "Settings");
+        buf->appendf("Pos=%d,%d Size=%d,%d\n\n", g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH);
+        };
+
+    ImGui::GetCurrentContext()->SettingsHandlers.push_back(ini_handler);
+}
 // Main code
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -55,6 +88,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // 全局/静态缓存，一次性加载，不要每帧重复解析+创建纹理
     ImVec2 iconSize;
 
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    RegisterWin32IniHandler();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGui::LoadIniSettingsFromDisk(io.IniFilename);
 
     int cx = ::GetSystemMetrics(SM_CXSCREEN);
     int cy = ::GetSystemMetrics(SM_CYSCREEN);
@@ -69,18 +108,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // ==================== 🚀 終極壁紙相容方案：可交互、不擋圖標版 ====================
      // 💡 核心修復一：移除 WS_EX_TRANSPARENT（滑鼠穿透），這樣按鈕和 Tab 就能正常點擊交互了！
      // 💡 核心修復二：保留 WS_EX_LAYERED 確保視窗跨越系統純色裁剪優化，100% 正常繪製
+
+    if (g_OSWinW == 0)
+    {
+        g_OSWinX = (cx - g_WinW) / 2;
+        g_OSWinY = (cy - g_WinH) / 2;
+        g_OSWinW = (int)(g_WinW * main_scale);
+        g_OSWinH = (int)(g_WinH * main_scale);
+    }
+    g_OSWinW < 50 ? g_OSWinW = 50 : 0;
+    g_OSWinH < 50 ? g_OSWinH = 50 : 0;
     HWND hwnd = ::CreateWindowExW(
         WS_EX_LAYERED,                      // 擴展樣式：僅保留層級，移除穿透
         wc.lpszClassName,
         L"-AppBox-",                         // 標題字串
         WS_POPUP | WS_CLIPCHILDREN,          // 標準彈出式（保持頂層身份，D3D才能穩定Present）
-        (cx - g_WinW) / 2,
-        (cy - g_WinH) / 2,
-        (int)(g_WinW * main_scale),
-        (int)(g_WinH * main_scale),
+        g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH,
         nullptr, nullptr, wc.hInstance, nullptr
     );
-
+    g_hwnd = hwnd;
     // 設定層級視窗的混色模式（不修改原本的透明度，但激發 Layered 獨立渲染鏈）
     ::SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
 
@@ -124,7 +170,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     gTab0.selectedTabIdx = &(gFUD.gCurTab);
     gTab0.folders = &(gFUD.gvFolderName);
 
-    ImGuiIO& io = ImGui::GetIO();
+ //   ImGuiIO& io = ImGui::GetIO();
     ImGuiStyle& style = ImGui::GetStyle();
     // ==================================================================
 
@@ -459,6 +505,32 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
     }
     break;
+    case WM_CLOSE: // 💡 視窗準備關閉，此時 HWND 還完全有效！
+    {
+        // 1. 趁視窗尚未完全從記憶體消失前，最後一次抓取最新座標到全域變數
+        RECT finalRect;
+        if (g_hwnd && ::GetWindowRect(g_hwnd, &finalRect)) {
+            g_OSWinX = finalRect.left;
+            g_OSWinY = finalRect.top;
+            g_OSWinW = finalRect.right - finalRect.left;
+            g_OSWinH = finalRect.bottom - finalRect.top;
+        }
+
+        //// 2. 💡 關鍵：手動將你的自訂設定值追加寫入到 ImGui 的快取快取區中
+        //// 這樣即使 ImGui 跳過 WriteAllFn，我們也已經把資料塞進去它的儲存序列了
+        //ImGui::MarkIniSettingsDirty();
+
+        //// 3. 💡 核心安全牌：你的 WriteAllFn 要確保像下面這樣寫（不依賴 HWND，直接讀全域變數）
+        //// （請確認你前面 RegisterWin32IniHandler 裡的 WriteAllFn 是使用全域變數的版本）
+
+        //// 4. 強制叫 ImGui 立刻把記憶體資料刷進硬碟的 imgui.ini
+        //ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
+
+        // 2. 執行正常的銷毀流程
+        ::DestroyWindow(hWnd);
+        return 0;
+    }
+    break;
     case WM_SIZE:
         if (wParam == SIZE_MINIMIZED)
             return 0;
@@ -478,9 +550,14 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 void InitImGuiContext(float fScale)
 {
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
+//    IMGUI_CHECKVERSION();
+ //   ImGui::CreateContext();
+
+  //  RegisterWin32IniHandler();
+
+
+
+    ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
