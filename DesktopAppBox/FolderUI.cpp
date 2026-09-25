@@ -49,27 +49,38 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
         float fSize = 64;
         ImVec2 iconSize = ImVec2(fSize, fSize);
 
-        // 1. 計算一個完整按鈕所需的固定總寬度（包含按鈕內襯 FramePadding）
-        float buttonWidth = iconSize.x + style.FramePadding.x * 2.0f;
+        // ==================== 1. 設定基礎參數 ====================
+        const float minPadding = 10.0f;    // 左右最小 Padding
+        const float topPadding = 5.0f;     // 💡 新增：上邊沿固定的 Padding
+        const float itemSpacingX = 5.0f;   // 圖標之間固定的橫向間距
+        const float itemSpacingY = 5.0f;   // 圖標之間固定的縱向間距
 
-        // 2. 取得當前視窗內容的可用總寬度
+        float buttonWidth = iconSize.x + style.FramePadding.x * 2.0f;
+        float buttonHeight = iconSize.y + style.FramePadding.y * 2.0f;
+
+        // 取得當前工作視窗的總可用寬度
         float windowWidth = ImGui::GetWindowContentRegionMax().x - ImGui::GetWindowContentRegionMin().x;
 
-        // 3. 計算最多能塞下幾個按鈕
-        int maxItemsPerRow = (int)((windowWidth + style.ItemSpacing.x) / (buttonWidth + style.ItemSpacing.x));
+        // ==================== 2. 核心幾何計算 ====================
+        int maxItemsPerRow = (int)((windowWidth - (minPadding * 2.0f) + itemSpacingX) / (buttonWidth + itemSpacingX));
         if (maxItemsPerRow < 1) maxItemsPerRow = 1;
 
-        // 4. 動態計算「橫向等距間距」
-        float dynamicSpacingX = style.ItemSpacing.x;
-        if (maxItemsPerRow > 1 && fud.gpvApp->size() >= (size_t)maxItemsPerRow)
-        {
-            float totalButtonsWidth = maxItemsPerRow * buttonWidth;
-            dynamicSpacingX = (windowWidth - totalButtonsWidth) / (maxItemsPerRow - 1);
+        int itemsInFirstRow = (int)fud.gpvApp->size();
+        if (itemsInFirstRow > maxItemsPerRow) {
+            itemsInFirstRow = maxItemsPerRow;
         }
 
-        // 💡 修正點 5：不要隨便用 PushStyleVar 改動 Y 軸間距，縱向保持原本的 style.ItemSpacing.y
-        // 這裡只設定 X 軸，確保萬一哪裡漏了 SameLine 時有基本間距
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, style.ItemSpacing.y));
+        float totalItemsWidth = (itemsInFirstRow * buttonWidth) + ((itemsInFirstRow - 1) * itemSpacingX);
+        if (itemsInFirstRow <= 1) {
+            totalItemsWidth = buttonWidth;
+        }
+
+        float dynamicPadding = (windowWidth - totalItemsWidth) / 2.0f;
+        if (dynamicPadding < minPadding) dynamicPadding = minPadding;
+
+        // ==================== 3. 動態渲染與換行 ====================
+        // 備份最初的 CursorPos（這代表目前 UI 內容繪製的起點）
+        ImVec2 startCursorPos = ImGui::GetCursorPos();
 
         for (size_t i = 0; i < fud.gpvApp->size(); ++i)
         {
@@ -79,30 +90,39 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             sprintf_s(szName, "btn%d", appIdx);
             appIdx++;
 
-            // 💡 修正點 6：完美的行列排版邏輯
             int col = (int)(i % maxItemsPerRow);
-            if (i > 0)
+            int row = (int)(i / maxItemsPerRow);
+
+            // 💡 完美的絕對座標排版
+            if (col == 0)
             {
-                if (col > 0)
-                {
-                    // 如果不是該行的第一個圖標，強行並排，並帶入精準計算的「動態橫向間距」
-                    ImGui::SameLine(0.0f, dynamicSpacingX);
-                }
-                else
-                {
-                    // 如果是新的一行的第一個圖標，不呼叫 SameLine（自然換行）
-                    // 但為了美觀，我們可以強制補一個換行後的縱向間距（可選，ImGui 預設也會帶入 ItemSpacing.y）
-                    // ImGui::Spacing(); // 如果覺得行距太近可以解開這行
-                }
+                // 設定橫向位置：起點 + 左邊動態 Padding
+                ImGui::SetCursorPosX(startCursorPos.x + dynamicPadding);
+
+                // 💡 修正縱向位置：每一行都要加上 topPadding，讓整體往下移 5 像素
+                float targetY = startCursorPos.y + topPadding + (row * (buttonHeight + itemSpacingY));
+                ImGui::SetCursorPosY(targetY);
+            }
+            else
+            {
+                ImGui::SameLine();
+
+                // 設定橫向位置
+                float targetX = startCursorPos.x + dynamicPadding + (col * (buttonWidth + itemSpacingX));
+                ImGui::SetCursorPosX(targetX);
+
+                // 💡 修正縱向位置：非首個圖標換行時，縱向也要精準對齊該行的 Y 軸
+                float targetY = startCursorPos.y + topPadding + (row * (buttonHeight + itemSpacingY));
+                ImGui::SetCursorPosY(targetY);
             }
 
-            // 7. 繪製 ImageButton
+            // 繪製 ImageButton
             if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
             {
                 ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
             }
 
-            // 8. 懸停 Tooltip
+            // 懸停 Tooltip
             if (ImGui::IsItemHovered())
             {
                 std::string sTip;
@@ -117,9 +137,6 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
                 }
             }
         }
-
-        // 9. 彈出剛才 Push 的樣式變數
-        ImGui::PopStyleVar();
     }
 }
 
