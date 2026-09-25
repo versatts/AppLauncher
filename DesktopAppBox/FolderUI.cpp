@@ -49,7 +49,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
         float fSize = 64;
         ImVec2 iconSize = ImVec2(fSize, fSize);
 
-        // 1. 計算一個完整按鈕所需的固定總寬度（包含按鈕內襯）
+        // 1. 計算一個完整按鈕所需的固定總寬度（包含按鈕內襯 FramePadding）
         float buttonWidth = iconSize.x + style.FramePadding.x * 2.0f;
 
         // 2. 取得當前視窗內容的可用總寬度
@@ -67,8 +67,9 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             dynamicSpacingX = (windowWidth - totalButtonsWidth) / (maxItemsPerRow - 1);
         }
 
-        // 5. 💡 關鍵：用 Style 統一注入橫向與縱向間距，讓 ImGui 自動處理行間距！
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(dynamicSpacingX, dynamicSpacingX));
+        // 💡 修正點 5：不要隨便用 PushStyleVar 改動 Y 軸間距，縱向保持原本的 style.ItemSpacing.y
+        // 這裡只設定 X 軸，確保萬一哪裡漏了 SameLine 時有基本間距
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, style.ItemSpacing.y));
 
         for (size_t i = 0; i < fud.gpvApp->size(); ++i)
         {
@@ -78,20 +79,27 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             sprintf_s(szName, "btn%d", appIdx);
             appIdx++;
 
-            // 6. 💡 核心排版：由 ImGui 決定換行，完全不使用 SetCursorPos！
+            // 💡 修正點 6：完美的行列排版邏輯
             int col = (int)(i % maxItemsPerRow);
-            if (i > 0 && col > 0)
+            if (i > 0)
             {
-                // 如果不是一行的第一個按鈕，就強行並排，並帶入我們計算好的動態間距
-                ImGui::SameLine(0.0f, dynamicSpacingX);
+                if (col > 0)
+                {
+                    // 如果不是該行的第一個圖標，強行並排，並帶入精準計算的「動態橫向間距」
+                    ImGui::SameLine(0.0f, dynamicSpacingX);
+                }
+                else
+                {
+                    // 如果是新的一行的第一個圖標，不呼叫 SameLine（自然換行）
+                    // 但為了美觀，我們可以強制補一個換行後的縱向間距（可選，ImGui 預設也會帶入 ItemSpacing.y）
+                    // ImGui::Spacing(); // 如果覺得行距太近可以解開這行
+                }
             }
 
             // 7. 繪製 ImageButton
+            if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
             {
-                if (ImGui::ImageButton(szName, (ImTextureID)a.iconSrv, iconSize))
-                {
-                    ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
-                }
+                ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
             }
 
             // 8. 懸停 Tooltip
@@ -110,7 +118,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             }
         }
 
-        // 9. 💡 記得彈出剛才 Push 的樣式變數
+        // 9. 彈出剛才 Push 的樣式變數
         ImGui::PopStyleVar();
     }
 }
