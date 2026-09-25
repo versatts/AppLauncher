@@ -29,28 +29,13 @@ static bool                     g_SwapChainOccluded = false;
 static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
 static ID3D11RenderTargetView*  g_mainRenderTargetView = nullptr;
 
+void InitImGuiContext(float);
 // Forward declarations of helper functions
 bool CreateDeviceD3D(HWND hWnd);
 void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-
-HWND g_hSecondWnd = nullptr;
-
-LRESULT CALLBACK SecondWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-    switch (msg)
-    {
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        break;
-    default:
-        return DefWindowProc(hWnd, msg, wParam, lParam);
-    }
-    return 0;
-}
 
 HWND gHwnd;
 int g_WinW = 600;
@@ -128,92 +113,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ::UpdateWindow(hwnd);
 
     // Setup Dear ImGui context
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
-#if ENABLE_VIEWPORTS
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
-#endif 
-    //io.ConfigViewportsNoAutoMerge = true;
-    //io.ConfigViewportsNoTaskBarIcon = true;
-    //io.ConfigDockingAlwaysTabBar = true;
-    //io.ConfigDockingTransparentPayload = true;
-
-    // Setup Dear ImGui style
-    //ImGui::StyleColorsDark();
-    ImGui::StyleColorsLight();
-
-    // Setup scaling
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.ScaleAllSizes(main_scale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
-    style.FontScaleDpi = main_scale;        // Set initial font scale. (in docking branch: using io.ConfigDpiScaleFonts=true automatically overrides this for every window depending on the current monitor)
-    io.ConfigDpiScaleFonts = true;          // [Experimental] Automatically overwrite style.FontScaleDpi in Begin() when Monitor DPI changes. This will scale fonts but _NOT_ scale sizes/padding for now.
-    io.ConfigDpiScaleViewports = true;      // [Experimental] Scale Dear ImGui and Platform Windows when Monitor DPI changes.
-
-    style.FramePadding.x = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
-    style.FramePadding.y = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
-
-    ImVec4* colors = style.Colors;
-    colors[ImGuiCol_TitleBg] = ImColor(0x4B, 0x4B, 0x52); // 窗口未激活标题栏
-    colors[ImGuiCol_TitleBgActive] = ImColor(0x4B, 0x4B, 0x52);// 当前激活窗口标题栏
-    colors[ImGuiCol_TitleBgCollapsed] = ImColor(0x4B, 0x4B, 0x52); // 窗口折叠后的标题栏
-
-    //#37373D
-    // 1. 窗口主体背景
-    style.Colors[ImGuiCol_WindowBg] = ImColor(0x37, 0x37, 0x3D);
-
-    style.Colors[ImGuiCol_Text] = ImColor(0xFF, 0xFF, 0xFF);      //普通文字
-    style.Colors[ImGuiCol_TextDisabled] = ImColor(0x80, 0x80, 0x80); //禁用控件文字;
-
-    style.Colors[ImGuiCol_FrameBg] = ImColor(40, 40, 40, 255);
-    style.Colors[ImGuiCol_FrameBgHovered] = ImColor(60, 60, 60, 255);
-    style.Colors[ImGuiCol_FrameBgActive] = ImColor(80, 80, 80, 255);
-
-    style.Colors[ImGuiCol_SliderGrab] = ImColor(60, 180, 255, 255);
-    style.Colors[ImGuiCol_SliderGrabActive] = ImColor(90, 200, 255, 255);
-
-    // Base color exactly matching RGB(85, 85, 85)
-    style.Colors[ImGuiCol_Button] = ImVec4(0.333f, 0.333f, 0.333f, 1.0f); // RGB(85, 85, 85) - Base Button
-    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.400f, 0.400f, 0.400f, 1.0f); // RGB(102, 102, 102) - Elevated hover
-    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Sunken pressed state
-
-    // Optional: If you want all buttons to have sharp corners like MFC globally
-    style.FrameRounding = 10.0f;
-    // =========================================================================
-
-       // ==================== 🚀 FIXED TAB HEADER MATCHING STYLE ====================
-    // 1. Core Tab Colors
-    style.Colors[ImGuiCol_Tab] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Inactive tab
-    style.Colors[ImGuiCol_TabActive] = ImVec4(0.380f, 0.380f, 0.380f, 1.0f); // RGB(97, 97, 97) - Hovered highlight
-    style.Colors[ImGuiCol_TabHovered] = ImVec4(0.480f, 0.480f, 0.480f, 1.0f); // RGB(55, 55, 55) - Active tab (blends with WindowBg)
-    // 2. 💡 Frame / Border Customization
-    // Overriding the border color to make sure it stands out explicitly around your selected items
-    style.Colors[ImGuiCol_Border] = ImVec4(0.450f, 0.460f, 0.470f, 1.0f); // Sharp contrast gray for wireframe lines
-
-    // 3. Geometry Tweak (Enabling Tab Border)
-    style.TabRounding = 4.0f; // Rounded tops
-    style.TabBorderSize = 1.0f; // 💡 CHANGED: Force 1-pixel frame around the tab headers
-    // ============================================================================
-
-        // ==================== 🚀 DARK TOOLTIP BACKGROUND ====================
-    // Deep Charcoal background for all tooltips and popups
-    style.Colors[ImGuiCol_PopupBg] = ImVec4(0.120f, 0.120f, 0.130f, 0.95f); // Near black with 95% opacity
-
-    // Optional: Add a crisp subtle border to frame the tooltip nicely against the backdrop
-    style.Colors[ImGuiCol_Border] = ImVec4(0.350f, 0.350f, 0.360f, 1.0f); // Sleek charcoal border
-    style.PopupBorderSize = 1.0f; // Force a 1-pixel outline on popups/tooltips
-    // ====================================================================
-
-
-    // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
-    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-    {
-        style.WindowRounding = 0.0f;
-        style.Colors[ImGuiCol_WindowBg].w = 1.f;
-    }
+    InitImGuiContext(main_scale);
 
     // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(hwnd);
@@ -224,29 +124,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     gTab0.selectedTabIdx = &(gFUD.gCurTab);
     gTab0.folders = &(gFUD.gvFolderName);
 
-   
-    // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
-    ImFontConfig cfg;
-    cfg.OversampleH = 2;
-    cfg.OversampleV = 2;
-    cfg.PixelSnapH = true;
-
-    // 清除或不要呼叫 AddFontDefaultVector / Bitmap
-    ImFont* fontYaHei = io.Fonts->AddFontFromFileTTF(
-        "C:\\Windows\\Fonts\\msyh.ttc",
-        20.0f,
-        &cfg,
-        io.Fonts->GetGlyphRangesChineseFull() // 載入完整中文
-    );
-
-    if (fontYaHei != nullptr) {
-        io.FontDefault = fontYaHei; // 設置全局預設字體
-    }
-    else {
-        // 如果加載失敗的防禦方案：使用系統預設
-        io.Fonts->AddFontDefault();
-    }
-
+    ImGuiIO& io = ImGui::GetIO();
+    ImGuiStyle& style = ImGui::GetStyle();
     // ==================================================================
 
     // Our state
@@ -282,7 +161,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         {
             CleanupRenderTarget();
             g_pSwapChain->ResizeBuffers(0, g_ResizeWidth, g_ResizeHeight, DXGI_FORMAT_UNKNOWN, 0);
-            g_ResizeWidth = g_ResizeHeight = 0;
+//            g_ResizeWidth = g_ResizeHeight = 0;
             CreateRenderTarget();
         }
 
@@ -318,22 +197,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             {
                 lastCollapsedState = isCollapsed;
 
-                int currentW = (int)(g_WinW * main_scale);
+                int currentW = (int)(g_ResizeWidth * main_scale);
                 int targetH = 0;
 
+                static int s_lastH = g_ResizeHeight;
                 if (isCollapsed)
                 {
+                    s_lastH = g_ResizeHeight;
                     // A. 被折疊了：縮小到只剩標題列高度
                     float titleBarHeight = ImGui::GetFontSize() + style.FramePadding.y * 2.0f;
                     targetH = (int)(titleBarHeight);// + style.WindowPadding.y);
-
-                    g_ResizeWidth = 0;
-                    g_ResizeHeight = 0;
                 }
                 else
                 {
                     // B. 被展開了：還原回原本完整的物理高度
-                    targetH = (int)(g_WinH * main_scale);
+                    targetH = (int)(s_lastH * main_scale);
                 }
 
                 // 💡 核心修正：
@@ -492,13 +370,6 @@ void CleanupRenderTarget()
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-// Win32 message handler
-// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
-// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-#define ID_BTN_OPENMFC  1001
-#define ID_BTN_CLOSEMFC 1002
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
@@ -506,21 +377,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg)
     {
-#if NEW_PLAN
-        // ==================== 🚀 終極釘死最底層防禦機制（不擋圖標） ====================
-    case WM_WINDOWPOSCHANGING:
-    {
-        WINDOWPOS* wp = (WINDOWPOS*)lParam;
-
-        // 💡 核心魔法：無論是誰（包含 ImGui 點擊、視窗聚焦）試圖把這個視窗提到最前，
-        // 我們都強制將它的插入順序（InsertAfter）覆寫為 HWND_BOTTOM。
-        // 這能確保它在外觀上與行為上，在點擊發生的同時，永遠死死地躺在桌面圖標的下方！
-        wp->hwndInsertAfter = HWND_BOTTOM;
-        wp->flags &= ~SWP_NOZORDER; // 確保 Z-Order 改變被強制執行
-        break;
-    }
-    // ===============================================================================
-#endif
+#if 0
     case WM_NCHITTEST:
     {
         // 获取屏幕坐标
@@ -547,6 +404,57 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         return HTCLIENT;
     }
+#endif
+
+    case WM_NCHITTEST:
+    {
+        // 1. 取得滑鼠在螢幕上的座標，並精準轉換為視窗內部客戶區座標
+        // (int)(short) 寫法可以完美相容多螢幕負數座標，不需額外引入標頭檔
+        POINT pt = { (int)(short)LOWORD(lParam), (int)(short)HIWORD(lParam) };
+        POINT screenPt = pt; // 保留一份螢幕座標
+        ::ScreenToClient(hWnd, &pt);
+
+        // 2. 手動計算縮放邊框 (Border) 區域
+        RECT rc;
+        ::GetClientRect(hWnd, &rc);
+        const int border = 8; // 💡 縮放感應寬度（像素），如果覺得難點可以調大到 10 或 12
+
+        bool left = (pt.x < border);
+        bool right = (pt.x > rc.right - border);
+        bool top = (pt.y < border);
+        bool bottom = (pt.y > rc.bottom - border);
+
+        // 3. 如果滑鼠落在邊緣，直接回傳對應的縮放訊號
+        if (top && left)     return HTTOPLEFT;
+        if (top && right)    return HTTOPRIGHT;
+        if (bottom && left)  return HTBOTTOMLEFT;
+        if (bottom && right) return HTBOTTOMRIGHT;
+        if (left)            return HTLEFT;
+        if (right)           return HTRIGHT;
+        if (top)             return HTTOP;
+        if (bottom)          return HTBOTTOM;
+
+        // 4. 如果不在邊緣，再精準判斷是否在 ImGui 的標題列上
+        ImGuiWindow* pWin = ImGui::FindWindowByName("-AppBox-");
+        if (pWin)
+        {
+            ImRect titleRect = pWin->TitleBarRect();
+
+            // 排除左右兩邊的按鈕空間（如選單、關閉按鈕等）
+            float h = titleRect.GetHeight();
+            titleRect.Min.x += h;
+            titleRect.Max.x -= h;
+
+            // 💡 關鍵修正：ImGui 的 TitleBarRect() 拿到的是相對於 ImGui 主畫布的座標（工作區座標）
+            // 由於我們前面已經把 pt 轉換成 Client 座標了，這裡直接比對才會百分之百精準！
+            if (titleRect.Contains(ImVec2((float)screenPt.x, (float)screenPt.y)))
+            {
+                return HTCAPTION; // 觸發拖動視窗
+            }
+        }
+
+        return HTCLIENT; // 既不是邊框也不是標題列，交給 ImGui 點擊按鈕
+    }
     case WM_CREATE:
     {
     }
@@ -560,15 +468,123 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_SYSCOMMAND:
         if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
             return 0;
-        if (LOWORD(wParam) == ID_BTN_OPENMFC)
-        {
-            
-            break;
-        }
         break;
     case WM_DESTROY:
         ::PostQuitMessage(0);
         return 0;
     }
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+void InitImGuiContext(float fScale)
+{
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
+#if ENABLE_VIEWPORTS
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
+#endif 
+    //io.ConfigViewportsNoAutoMerge = true;
+    //io.ConfigViewportsNoTaskBarIcon = true;
+    //io.ConfigDockingAlwaysTabBar = true;
+    //io.ConfigDockingTransparentPayload = true;
+
+    // Setup Dear ImGui style
+    //ImGui::StyleColorsDark();
+    ImGui::StyleColorsLight();
+
+    // Setup scaling
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(fScale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
+    style.FontScaleDpi = fScale;        // Set initial font scale. (in docking branch: using io.ConfigDpiScaleFonts=true automatically overrides this for every window depending on the current monitor)
+    io.ConfigDpiScaleFonts = true;          // [Experimental] Automatically overwrite style.FontScaleDpi in Begin() when Monitor DPI changes. This will scale fonts but _NOT_ scale sizes/padding for now.
+    io.ConfigDpiScaleViewports = true;      // [Experimental] Scale Dear ImGui and Platform Windows when Monitor DPI changes.
+
+    style.FramePadding.x = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
+    style.FramePadding.y = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
+
+    ImVec4* colors = style.Colors;
+    colors[ImGuiCol_TitleBg] = ImColor(0x4B, 0x4B, 0x52); // 窗口未激活标题栏
+    colors[ImGuiCol_TitleBgActive] = ImColor(0x4B, 0x4B, 0x52);// 当前激活窗口标题栏
+    colors[ImGuiCol_TitleBgCollapsed] = ImColor(0x4B, 0x4B, 0x52); // 窗口折叠后的标题栏
+
+    //#37373D
+    // 1. 窗口主体背景
+    style.Colors[ImGuiCol_WindowBg] = ImColor(0x37, 0x37, 0x3D);
+
+    style.Colors[ImGuiCol_Text] = ImColor(0xFF, 0xFF, 0xFF);      //普通文字
+    style.Colors[ImGuiCol_TextDisabled] = ImColor(0x80, 0x80, 0x80); //禁用控件文字;
+
+    style.Colors[ImGuiCol_FrameBg] = ImColor(40, 40, 40, 255);
+    style.Colors[ImGuiCol_FrameBgHovered] = ImColor(60, 60, 60, 255);
+    style.Colors[ImGuiCol_FrameBgActive] = ImColor(80, 80, 80, 255);
+
+    style.Colors[ImGuiCol_SliderGrab] = ImColor(60, 180, 255, 255);
+    style.Colors[ImGuiCol_SliderGrabActive] = ImColor(90, 200, 255, 255);
+
+    // Base color exactly matching RGB(85, 85, 85)
+    style.Colors[ImGuiCol_Button] = ImVec4(0.333f, 0.333f, 0.333f, 1.0f); // RGB(85, 85, 85) - Base Button
+    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.400f, 0.400f, 0.400f, 1.0f); // RGB(102, 102, 102) - Elevated hover
+    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Sunken pressed state
+
+    // Optional: If you want all buttons to have sharp corners like MFC globally
+    style.FrameRounding = 10.0f;
+    // =========================================================================
+
+       // ==================== 🚀 FIXED TAB HEADER MATCHING STYLE ====================
+    // 1. Core Tab Colors
+    style.Colors[ImGuiCol_Tab] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Inactive tab
+    style.Colors[ImGuiCol_TabActive] = ImVec4(0.380f, 0.380f, 0.380f, 1.0f); // RGB(97, 97, 97) - Hovered highlight
+    style.Colors[ImGuiCol_TabHovered] = ImVec4(0.480f, 0.480f, 0.480f, 1.0f); // RGB(55, 55, 55) - Active tab (blends with WindowBg)
+    // 2. 💡 Frame / Border Customization
+    // Overriding the border color to make sure it stands out explicitly around your selected items
+    style.Colors[ImGuiCol_Border] = ImVec4(0.450f, 0.460f, 0.470f, 1.0f); // Sharp contrast gray for wireframe lines
+
+    // 3. Geometry Tweak (Enabling Tab Border)
+    style.TabRounding = 4.0f; // Rounded tops
+    style.TabBorderSize = 1.0f; // 💡 CHANGED: Force 1-pixel frame around the tab headers
+    // ============================================================================
+
+        // ==================== 🚀 DARK TOOLTIP BACKGROUND ====================
+    // Deep Charcoal background for all tooltips and popups
+    style.Colors[ImGuiCol_PopupBg] = ImVec4(0.120f, 0.120f, 0.130f, 0.95f); // Near black with 95% opacity
+
+    // Optional: Add a crisp subtle border to frame the tooltip nicely against the backdrop
+    style.Colors[ImGuiCol_Border] = ImVec4(0.350f, 0.350f, 0.360f, 1.0f); // Sleek charcoal border
+    style.PopupBorderSize = 1.0f; // Force a 1-pixel outline on popups/tooltips
+    // ====================================================================
+
+
+    // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+    {
+        style.WindowRounding = 0.0f;
+        style.Colors[ImGuiCol_WindowBg].w = 1.f;
+    }
+
+    // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
+    ImFontConfig cfg;
+    cfg.OversampleH = 2;
+    cfg.OversampleV = 2;
+    cfg.PixelSnapH = true;
+
+    // 清除或不要呼叫 AddFontDefaultVector / Bitmap
+    ImFont* fontYaHei = io.Fonts->AddFontFromFileTTF(
+        "C:\\Windows\\Fonts\\msyh.ttc",
+        20.0f,
+        &cfg,
+        io.Fonts->GetGlyphRangesChineseFull() // 載入完整中文
+    );
+
+    if (fontYaHei != nullptr) {
+        io.FontDefault = fontYaHei; // 設置全局預設字體
+    }
+    else {
+        // 如果加載失敗的防禦方案：使用系統預設
+        io.Fonts->AddFontDefault();
+    }
+
 }
