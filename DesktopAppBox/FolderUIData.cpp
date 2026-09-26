@@ -47,8 +47,12 @@ void FolderUIData::MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::
                 resolved = true;
             }
             // 解析 URL 機制
-            else if (ResolveUrlTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH, iconPath, MAX_PATH))
+
+            WCHAR iconPath2[MAX_PATH] = { 0 };
+            bool bRet = ResolveUrlTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH, iconPath2, MAX_PATH);
+            if (!resolved && bRet)
             {
+                wcsncpy_s(iconPath, iconPath2, INTERNET_MAX_URL_LENGTH);
                 resolved = true;
             }
         }
@@ -61,7 +65,8 @@ void FolderUIData::MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::
                 resolved = true;
             }
             // 原有的 .lnk 解析機制
-            else if (ResolveLnkTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH))
+            bool bRet = ResolveLnkTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH);
+            if (!resolved && bRet)
             {
                 // 標準 exe 的圖標路徑就是它自己
                 wcsncpy_s(iconPath, item.exePathBuf, INTERNET_MAX_URL_LENGTH);
