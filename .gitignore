@@ -5,7 +5,7 @@
 x64/
 AppLauncher/x64/
 DesktopAppBox/Debug/
-DesktopAppBox/Debug/*.ini
+DesktopAppBox/*.ini
 DesktopAppBox/Release/
 /MyDemo/example_win32_directx11/Debug/
 /MyDemo/example_win32_directx11/*.ini
