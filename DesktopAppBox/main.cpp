@@ -184,7 +184,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // ==================================================================
 
     // Our state
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 0.00f);
 
     // Main loop
     bool done = false;
@@ -227,6 +227,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
         // 0. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
         {
+            static bool show_close_confirmation = false;
+
             ImGuiViewport* main_vp = ImGui::GetMainViewport();
 
             ImGui::SetNextWindowPos(main_vp->WorkPos, ImGuiCond_Always);
@@ -241,59 +243,102 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
             static float f = 0.0f;
             static int counter = 0;
-            bool bOpen = true;
-            ImGui::Begin("-AppBox-", &bOpen, win_flags);     
-
-            // ==================== 🚀 修正版：Win32 主視窗跟隨折疊縮放（強制置底） ====================
-            static bool lastCollapsedState = false;
-            isCollapsed = ImGui::IsWindowCollapsed();
-
-            if (isCollapsed != lastCollapsedState)
+            static bool bOpen = true;
+            if (bOpen)
             {
-                lastCollapsedState = isCollapsed;
+                ImGui::Begin("-AppBox-", &bOpen, win_flags);
 
-                int currentW = (int)(g_ResizeWidth * main_scale);
-                int targetH = 0;
+                // ==================== 🚀 修正版：Win32 主視窗跟隨折疊縮放（強制置底） ====================
+                static bool lastCollapsedState = false;
+                isCollapsed = ImGui::IsWindowCollapsed();
 
-                if (isCollapsed)
+                if (isCollapsed != lastCollapsedState)
                 {
-                    g_OSWinH_0 = g_ResizeHeight;
-                    // A. 被折疊了：縮小到只剩標題列高度
-                    float titleBarHeight = ImGui::GetFontSize() + style.FramePadding.y * 2.0f;
-                    targetH = (int)(titleBarHeight);// + style.WindowPadding.y);
+                    lastCollapsedState = isCollapsed;
+
+                    int currentW = (int)(g_ResizeWidth * main_scale);
+                    int targetH = 0;
+
+                    if (isCollapsed)
+                    {
+                        g_OSWinH_0 = g_ResizeHeight;
+                        // A. 被折疊了：縮小到只剩標題列高度
+                        float titleBarHeight = ImGui::GetFontSize() + style.FramePadding.y * 2.0f;
+                        targetH = (int)(titleBarHeight);// + style.WindowPadding.y);
+                    }
+                    else
+                    {
+                        // B. 被展開了：還原回原本完整的物理高度
+                        targetH = (int)(g_OSWinH_0 * main_scale);
+                    }
+
+                    // 💡 核心修正：
+                    // 1. 第二個參數不能傳 NULL，必須強制鎖定為 HWND_BOTTOM
+                    // 2. 標記加上 SWP_NOOWNERZORDER，徹底禁止 Windows 調整其與桌面管理器的 Owner 層級關係
+                    ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, currentW, targetH,
+                        SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
                 }
-                else
+                // =====================================================================================
+
+
+                // 如果被折疊了，後半段的按鈕網格和文字渲染就不用跑了（ImGui 內部會自動跳過，但我們這裡加個防禦）
+                if (!isCollapsed)
                 {
-                    // B. 被展開了：還原回原本完整的物理高度
-                    targetH = (int)(g_OSWinH_0 * main_scale);
+                    //ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+                   // ImGui::Text(u8"帧率(%.0f FPS)", io.Framerate);
+
+                    gTabUI.Render();
+
+                    gFU.Render(hwnd, gFUD);
                 }
 
-                // 💡 核心修正：
-                // 1. 第二個參數不能傳 NULL，必須強制鎖定為 HWND_BOTTOM
-                // 2. 標記加上 SWP_NOOWNERZORDER，徹底禁止 Windows 調整其與桌面管理器的 Owner 層級關係
-                ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, currentW, targetH,
-                    SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+                ImGui::End();
             }
-            // =====================================================================================
-
-
-            // 如果被折疊了，後半段的按鈕網格和文字渲染就不用跑了（ImGui 內部會自動跳過，但我們這裡加個防禦）
-            if (!isCollapsed)
-            {
-                //ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-               // ImGui::Text(u8"帧率(%.0f FPS)", io.Framerate);
-
-                gTabUI.Render();
-
-                gFU.Render(hwnd, gFUD);
-            }
-
-            ImGui::End();
-
+            // 關鍵修改：如果使用者點擊了主視窗的 X（bOpen 變為 false）
             if (!bOpen)
             {
-                // 这里你可以选择：关闭MFC对话框
-                ::PostMessage(hwnd, WM_CLOSE, 0, 0);
+                // 重設 bOpen 為 true，防止主視窗直接消失，維持畫面渲染
+                bOpen = true;
+                // 開啟模態視窗的觸發開關
+                show_close_confirmation = true;
+            }
+
+            // --- 模態確認對話框渲染 ---
+            if (show_close_confirmation)
+            {
+                // 強制在下一幀打開名為 "ExitConfirmation" 的模態視窗
+                ImGui::OpenPopup("ExitConfirmation");
+            }
+
+            // 開始繪製模態視窗（這會自動讓背景變暗且無法點擊主視窗）
+            if (ImGui::BeginPopupModal("ExitConfirmation", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                // 顯示反差文字（會自動套用你上一題設定的文字顏色）
+                ImGui::Text("確定要關閉程式嗎？");
+                ImGui::Separator();
+
+                // 寬度稍微撐開
+                float button_width = ImGui::GetFontSize() * 5.0f;
+
+                if (ImGui::Button("確定", ImVec2(button_width, 0)))
+                {
+                    ImGui::CloseCurrentPopup();
+                    show_close_confirmation = false;
+
+                    // 使用者確認要關閉，此時才正式發送 Win32 關閉訊息
+                    ::PostMessage(hwnd, WM_CLOSE, 0, 0);
+                }
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("取消", ImVec2(button_width, 0)))
+                {
+                    ImGui::CloseCurrentPopup();
+                    show_close_confirmation = false;
+                    // 保持 bOpen = true，使用者可以繼續使用主視窗
+                }
+
+                ImGui::EndPopup();
             }
         }
 
@@ -564,7 +609,7 @@ void InitImGuiContext(float fScale)
     style.TabBorderSize = 0.0f; // 💡 CHANGED: Force 1-pixel frame around the tab headers
 
     ImVec4* colors = style.Colors;
-
+#if 1
     auto ChangeColorBrightness = [](const ImVec4& color, float factor)->ImVec4 {
         return ImVec4(
             std::clamp(color.x * factor, 0.0f, 1.0f),
@@ -573,15 +618,14 @@ void InitImGuiContext(float fScale)
             color.w
         );
         };
-
     // 1. 獲取系統 Windows 強調色字串 (例如 "#4B4B52")
     std::string winColorStr = GetWindowsAccentColor();
-
+    ImVec4 accClr = IMVEC4(winColorStr);
     // 2. 核心背景色設置
     // 視窗背景 (WindowBg) 與 標題列 (TitleBg) 都套用系統主色
-    colors[ImGuiCol_WindowBg] = ChangeColorBrightness(IMVEC4(winColorStr, 1.0f), 0.5);
-    colors[ImGuiCol_TitleBg] = IMVEC4(winColorStr, 1.0f);
-    colors[ImGuiCol_TitleBgActive] = IMVEC4(winColorStr, 1.0f);
+    colors[ImGuiCol_WindowBg] = ChangeColorBrightness(accClr, 0.5);
+    colors[ImGuiCol_TitleBg] = IMCLR("#AAAAAA");
+    colors[ImGuiCol_TitleBgActive] = accClr;
     colors[ImGuiCol_TitleBgCollapsed] = IMVEC4(winColorStr, 0.7f); // 折疊時稍微帶點透明度
 
     // 3. 自動計算「文字反差色」
@@ -600,8 +644,8 @@ void InitImGuiContext(float fScale)
     colors[ImGuiCol_Text] = textColor;
     colors[ImGuiCol_TextDisabled] = disabledTextColor;
     colors[ImGuiCol_TableHeaderBg] = IMVEC4(winColorStr, 0.8f);
-
-   #if 0
+#endif
+#if 0
     colors[ImGuiCol_TitleBg] = IMCLR("#FFC90E");
     colors[ImGuiCol_TitleBgActive] = IMCLR("#FFC90E");
     colors[ImGuiCol_TitleBgCollapsed] = IMCLR("#FF7F27");
