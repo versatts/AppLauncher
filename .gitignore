@@ -3,11 +3,11 @@
 *.suo
 *.user
 x64/
-AppLauncher/x64/
-DesktopAppBox/Debug/
-DesktopAppBox/*.ini
-DesktopAppBox/Release/
+/AppLauncher/x64/
+/DesktopAppBox/Debug/
+/DesktopAppBox/Release/
 /MyDemo/example_win32_directx11/Debug/
 /MyDemo/example_win32_directx11/*.ini
 /MyDemo/DesktopAppBox/Debug/
 /MyDemo/DesktopAppBox/*.ini
+/DesktopAppBox/*.ini
