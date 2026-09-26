@@ -34,7 +34,7 @@ public:
     std::vector<ST_APP>* gpvApp = nullptr;
     std::vector<std::wstring> gvFolderName;
 
-    int gCurTab = 0;
+    int* m_pIdx = nullptr;
     bool m_bShowName = true;
 private:
     void MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::vector<std::wstring>& lnkList, ST_FOLDER& folder);

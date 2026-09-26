@@ -43,7 +43,7 @@ int g_WinH = 400;
 FolderUIData gFUD;
 FolderUI gFU;
 
-TabHeadUI gTab0;
+TabHeadUI gTabUI;
 ResLoader gRes;
 
 // 確保全域或靜態變數可以被存取
@@ -170,10 +170,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     gFUD.Init(g_pd3dDevice, &gRes);
 
-    gTab0.selectedTabIdx = &(gFUD.gCurTab);
-    gTab0.folders = &(gFUD.gvFolderName);
+    gTabUI.m_Idx = 0;
+    if (gFUD.gvFolder.size())
+    {
+        gTabUI.m_arrTab = gFUD.gvFolderName;
+        gFUD.m_pIdx = &gTabUI.m_Idx;
+    }
 
- //   ImGuiIO& io = ImGui::GetIO();
     ImGuiStyle& style = ImGui::GetStyle();
     // ==================================================================
 
@@ -277,7 +280,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 //ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
                // ImGui::Text(u8"帧率(%.0f FPS)", io.Framerate);
 
-                gTab0.Render();
+                gTabUI.Render();
 
                 gFU.Render(hwnd, gFUD);
             }
@@ -425,35 +428,6 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg)
     {
-#if 0
-    case WM_NCHITTEST:
-    {
-        // 获取屏幕坐标
-        POINT pt = { LOWORD(lParam), HIWORD(lParam) };
-        // 交给ImGui判断当前点是否在ImGui窗口标题栏
-        ImGuiIO& io = ImGui::GetIO();
-        ImVec2 imgPt = ImVec2((float)pt.x, (float)pt.y);
-        ImGuiWindow* pWin = ImGui::FindWindowByName("-AppBox-");
-        
-        bool bCaption = false;
-        if (pWin) 
-        {
-            ImRect a = pWin->TitleBarRect();
-            float h = a.GetHeight();
-            a.Min.x += h;
-            a.Max.x -= h;
-            if (a.Contains(imgPt))
-                bCaption = true;
-        }
- 
-        if (bCaption)
-        {
-            return HTCAPTION;
-        }
-        return HTCLIENT;
-    }
-#endif
-
     case WM_NCHITTEST:
     {
         // 1. 取得滑鼠在螢幕上的座標，並精準轉換為視窗內部客戶區座標
@@ -527,20 +501,6 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 g_OSWinH = finalRect.bottom - finalRect.top;
             }
         }
-
-        //// 2. 💡 關鍵：手動將你的自訂設定值追加寫入到 ImGui 的快取快取區中
-        //// 這樣即使 ImGui 跳過 WriteAllFn，我們也已經把資料塞進去它的儲存序列了
-        //ImGui::MarkIniSettingsDirty();
-
-        //// 3. 💡 核心安全牌：你的 WriteAllFn 要確保像下面這樣寫（不依賴 HWND，直接讀全域變數）
-        //// （請確認你前面 RegisterWin32IniHandler 裡的 WriteAllFn 是使用全域變數的版本）
-
-        //// 4. 強制叫 ImGui 立刻把記憶體資料刷進硬碟的 imgui.ini
-        //ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
-
-        // 2. 執行正常的銷毀流程
-        ::DestroyWindow(hWnd);
-        return 0;
     }
     break;
     case WM_SIZE:

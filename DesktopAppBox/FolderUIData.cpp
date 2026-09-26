@@ -7,13 +7,15 @@ void FolderUIData::Init(ID3D11Device* pd3dDevice, ResLoader* pRL)
     std::vector<std::wstring> vFolder;
     auto lnkList = EnumLnkFilesInAppDir(sDir, vFolder);
 
-    ST_FOLDER folder0;
-    folder0.sName = _T("Useful");
-    MakeOneFolder(pd3dDevice, pRL, lnkList, folder0);
-    gvFolder.push_back(folder0);
-    gvFolderName.push_back(folder0.sName);
-    gpvApp = &(gvFolder[0].vApp);
-
+    if (lnkList.size())
+    {
+        ST_FOLDER folder0;
+        folder0.sName = _T("Useful");
+        MakeOneFolder(pd3dDevice, pRL, lnkList, folder0);
+        gvFolder.push_back(folder0);
+        gvFolderName.push_back(folder0.sName);
+        gpvApp = &(gvFolder[0].vApp);
+    }
 
     for (auto fx : vFolder)
     {
