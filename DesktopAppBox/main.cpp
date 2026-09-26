@@ -48,6 +48,8 @@ ResLoader gRes;
 
 // 確保全域或靜態變數可以被存取
 static int g_OSWinX = 100, g_OSWinY = 100, g_OSWinW = 0, g_OSWinH = 0;
+static int g_OSWinH_0 = 0;
+bool isCollapsed = false;
 static HWND g_hwnd = nullptr; // 💡 用來儲存你建立好的 HWND
 
 // 💡 寫一個專門的初始化註冊函式，在 ImGui::CreateContext() 之後立刻呼叫
@@ -118,6 +120,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
     g_OSWinW < 50 ? g_OSWinW = 50 : 0;
     g_OSWinH < 50 ? g_OSWinH = 50 : 0;
+    g_OSWinH_0 = g_OSWinH;
     HWND hwnd = ::CreateWindowExW(
         WS_EX_LAYERED,                      // 擴展樣式：僅保留層級，移除穿透
         wc.lpszClassName,
@@ -237,7 +240,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
             // ==================== 🚀 修正版：Win32 主視窗跟隨折疊縮放（強制置底） ====================
             static bool lastCollapsedState = false;
-            bool isCollapsed = ImGui::IsWindowCollapsed();
+            isCollapsed = ImGui::IsWindowCollapsed();
 
             if (isCollapsed != lastCollapsedState)
             {
@@ -246,10 +249,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 int currentW = (int)(g_ResizeWidth * main_scale);
                 int targetH = 0;
 
-                static int s_lastH = g_ResizeHeight;
                 if (isCollapsed)
                 {
-                    s_lastH = g_ResizeHeight;
+                    g_OSWinH_0 = g_ResizeHeight;
                     // A. 被折疊了：縮小到只剩標題列高度
                     float titleBarHeight = ImGui::GetFontSize() + style.FramePadding.y * 2.0f;
                     targetH = (int)(titleBarHeight);// + style.WindowPadding.y);
@@ -257,7 +259,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 else
                 {
                     // B. 被展開了：還原回原本完整的物理高度
-                    targetH = (int)(s_lastH * main_scale);
+                    targetH = (int)(g_OSWinH_0 * main_scale);
                 }
 
                 // 💡 核心修正：
@@ -471,14 +473,17 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         bool bottom = (pt.y > rc.bottom - border);
 
         // 3. 如果滑鼠落在邊緣，直接回傳對應的縮放訊號
-        if (top && left)     return HTTOPLEFT;
-        if (top && right)    return HTTOPRIGHT;
-        if (bottom && left)  return HTBOTTOMLEFT;
-        if (bottom && right) return HTBOTTOMRIGHT;
+        if (!isCollapsed)
+        {
+            if (top && left)     return HTTOPLEFT;
+            if (top && right)    return HTTOPRIGHT;
+            if (bottom && left)  return HTBOTTOMLEFT;
+            if (bottom && right) return HTBOTTOMRIGHT;
+            if (top)             return HTTOP;
+            if (bottom)          return HTBOTTOM;
+        }
         if (left)            return HTLEFT;
         if (right)           return HTRIGHT;
-        if (top)             return HTTOP;
-        if (bottom)          return HTBOTTOM;
 
         // 4. 如果不在邊緣，再精準判斷是否在 ImGui 的標題列上
         ImGuiWindow* pWin = ImGui::FindWindowByName("-AppBox-");
@@ -513,7 +518,14 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             g_OSWinX = finalRect.left;
             g_OSWinY = finalRect.top;
             g_OSWinW = finalRect.right - finalRect.left;
-            g_OSWinH = finalRect.bottom - finalRect.top;
+            if (isCollapsed)
+            {
+                g_OSWinH = g_OSWinH_0;
+            }
+            else
+            {
+                g_OSWinH = finalRect.bottom - finalRect.top;
+            }
         }
 
         //// 2. 💡 關鍵：手動將你的自訂設定值追加寫入到 ImGui 的快取快取區中
