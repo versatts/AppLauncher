@@ -546,8 +546,8 @@ void InitImGuiContext(float fScale)
 
     // Setup Dear ImGui style
     //ImGui::StyleColorsDark();
-    ImGui::StyleColorsLight();
-    //ImGui::StyleColorsClassic();
+    //ImGui::StyleColorsLight();
+    ImGui::StyleColorsClassic();
 
     // Setup scaling
     ImGuiStyle& style = ImGui::GetStyle();
@@ -565,7 +565,43 @@ void InitImGuiContext(float fScale)
 
     ImVec4* colors = style.Colors;
 
-#if 0
+    auto ChangeColorBrightness = [](const ImVec4& color, float factor)->ImVec4 {
+        return ImVec4(
+            std::clamp(color.x * factor, 0.0f, 1.0f),
+            std::clamp(color.y * factor, 0.0f, 1.0f),
+            std::clamp(color.z * factor, 0.0f, 1.0f),
+            color.w
+        );
+        };
+
+    // 1. 獲取系統 Windows 強調色字串 (例如 "#4B4B52")
+    std::string winColorStr = GetWindowsAccentColor();
+
+    // 2. 核心背景色設置
+    // 視窗背景 (WindowBg) 與 標題列 (TitleBg) 都套用系統主色
+    colors[ImGuiCol_WindowBg] = ChangeColorBrightness(IMVEC4(winColorStr, 1.0f), 0.5);
+    colors[ImGuiCol_TitleBg] = IMVEC4(winColorStr, 1.0f);
+    colors[ImGuiCol_TitleBgActive] = IMVEC4(winColorStr, 1.0f);
+    colors[ImGuiCol_TitleBgCollapsed] = IMVEC4(winColorStr, 0.7f); // 折疊時稍微帶點透明度
+
+    // 3. 自動計算「文字反差色」
+    // 解析出 RGB 的 0.0f - 1.0f 數值
+    ImVec4 bg = colors[ImGuiCol_WindowBg];
+
+    // W3C 相對亮度公式 (Relative Luminance)
+    // 綠色對人眼最敏感，藍色最不敏感，公式比例：R*0.299 + G*0.587 + B*0.114
+    float luminance = (bg.x * 0.299f) + (bg.y * 0.587f) + (bg.z * 0.114f);
+
+    // 如果背景亮度大於 0.5 (偏亮/淺色)，文字就用黑色；反之用白色
+    ImVec4 textColor = (luminance > 0.5f) ? ImVec4(0.0f, 0.0f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+    ImVec4 disabledTextColor = ImVec4(textColor.x, textColor.y, textColor.z, 0.5f); // 半透明做為停用文字
+
+    // 4. 套用文字反差色
+    colors[ImGuiCol_Text] = textColor;
+    colors[ImGuiCol_TextDisabled] = disabledTextColor;
+    colors[ImGuiCol_TableHeaderBg] = IMVEC4(winColorStr, 0.8f);
+
+   #if 0
     colors[ImGuiCol_TitleBg] = IMCLR("#FFC90E");
     colors[ImGuiCol_TitleBgActive] = IMCLR("#FFC90E");
     colors[ImGuiCol_TitleBgCollapsed] = IMCLR("#FF7F27");

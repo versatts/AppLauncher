@@ -36,3 +36,31 @@ ImColor ImGuiObj::ToImClr(const std::string& hexStr)
     return ImColor(r, g, b, a);
 }
 
+ImVec4 ImGuiObj::ToImVec4(const std::string& hexStr, float alpha) {
+    // 移除可能存在的 '#' 前綴
+    std::string cleanHex = hexStr;
+    if (!cleanHex.empty() && cleanHex[0] == '#') {
+        cleanHex = cleanHex.substr(1);
+    }
+
+    // 預設返回黑色不透明 (0, 0, 0, alpha)
+    unsigned int rgb = 0x000000;
+
+    try {
+        if (cleanHex.length() >= 6) {
+            // 取前 6 位進行 RGB 解析
+            rgb = std::stoul(cleanHex.substr(0, 6), nullptr, 16);
+        }
+    }
+    catch (...) {
+        // 解析失敗時返回帶自訂透明度的黑色
+        return ImVec4(0.0f, 0.0f, 0.0f, alpha);
+    }
+
+    // 提取通道並將 0-255 對映到 0.0f-1.0f
+    float r = static_cast<float>((rgb >> 16) & 0xFF) / 255.0f;
+    float g = static_cast<float>((rgb >> 8) & 0xFF) / 255.0f;
+    float b = static_cast<float>(rgb & 0xFF) / 255.0f;
+
+    return ImVec4(r, g, b, alpha);
+}

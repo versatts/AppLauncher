@@ -5,6 +5,41 @@
 #include <tchar.h>
 #pragma comment(lib, "Shlwapi.lib")
 
+
+// 從 Windows 註冊表獲取當前系統強調色，並返回 "#RRGGBB" 格式字串
+std::string GetWindowsAccentColor() {
+    DWORD bgrColor = 0;
+    DWORD dataSize = sizeof(bgrColor);
+
+    // 讀取註冊表中的強調色
+    LSTATUS status = ::RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent",
+        L"AccentColorMenu",
+        RRF_RT_REG_DWORD,
+        nullptr,
+        &bgrColor,
+        &dataSize
+    );
+
+    // 如果讀取失敗，預設返回 Windows 經典藍色 "#0078D7"
+    if (status != ERROR_SUCCESS) {
+        return "#0078D7";
+    }
+
+    // 註冊表中的格式通常為 ABGR (0xAABBGGRR)
+    // 我們需要將其提取並重組成 RGB 順序
+    int r = (bgrColor >> 0) & 0xFF;
+    int g = (bgrColor >> 8) & 0xFF;
+    int b = (bgrColor >> 16) & 0xFF;
+
+    // 格式化為 #RRGGBB 字串
+    char hexBuffer[9];
+    std::snprintf(hexBuffer, sizeof(hexBuffer), "#%02X%02X%02X", r, g, b);
+
+    return std::string(hexBuffer);
+}
+
 bool CheckSpecificIcon(const std::wstring& exePath, std::wstring& sIcon)
 {
     sIcon = exePath;

@@ -8,6 +8,8 @@
 #pragma comment(lib,"comsuppw.lib")
 #pragma comment(lib,"d3d11.lib")
 
+std::string GetWindowsAccentColor();
+
 bool CheckSpecificIcon(const std::wstring& exePath, std::wstring& sIcon);
 
 std::string GetUtf8FileNameFromWstring(const std::wstring& wpath);
