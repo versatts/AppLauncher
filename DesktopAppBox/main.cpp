@@ -6,14 +6,14 @@
 // - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
 // - Introduction, links and more at the top of imgui.cpp
 
-#include "imgui.h"
-#include "imgui_impl_win32.h"
-#include "imgui_impl_dx11.h"
-#include "imgui_internal.h"
+#include "ImGuiObj.h"
 #include <d3d11.h>
 #include <tchar.h>
 #include <vector>
 #include <algorithm>
+
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
 
 #include "link.h"
 #include "ResLoader.h"
@@ -132,6 +132,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     g_hwnd = hwnd;
     // 設定層級視窗的混色模式（不修改原本的透明度，但激發 Layered 獨立渲染鏈）
     ::SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+
+    MARGINS margins = { -1 }; // -1 表示將透明區域擴展至整個窗口
+    ::DwmExtendFrameIntoClientArea(hwnd, &margins);
 
     // 尋找 Progman 桌面管理器
     HWND hProgman = ::FindWindowW(L"Progman", L"Program Manager");
@@ -544,6 +547,7 @@ void InitImGuiContext(float fScale)
     // Setup Dear ImGui style
     //ImGui::StyleColorsDark();
     ImGui::StyleColorsLight();
+    //ImGui::StyleColorsClassic();
 
     // Setup scaling
     ImGuiStyle& style = ImGui::GetStyle();
@@ -554,15 +558,21 @@ void InitImGuiContext(float fScale)
 
     style.FramePadding.x = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
     style.FramePadding.y = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
+    style.FrameRounding = 10.0f;
+
+    style.TabRounding = 3.0f; // Rounded tops
+    style.TabBorderSize = 0.0f; // 💡 CHANGED: Force 1-pixel frame around the tab headers
 
     ImVec4* colors = style.Colors;
-    colors[ImGuiCol_TitleBg] = ImColor(0x4B, 0x4B, 0x52); // 窗口未激活标题栏
-    colors[ImGuiCol_TitleBgActive] = ImColor(0x4B, 0x4B, 0x52);// 当前激活窗口标题栏
-    colors[ImGuiCol_TitleBgCollapsed] = ImColor(0x4B, 0x4B, 0x52); // 窗口折叠后的标题栏
 
+#if 0
+    colors[ImGuiCol_TitleBg] = IMCLR("#FFC90E");
+    colors[ImGuiCol_TitleBgActive] = IMCLR("#FFC90E");
+    colors[ImGuiCol_TitleBgCollapsed] = IMCLR("#FF7F27");
+
+    colors[ImGuiCol_WindowBg] = IMCLR("#A349A4");
     //#37373D
     // 1. 窗口主体背景
-    style.Colors[ImGuiCol_WindowBg] = ImColor(0x37, 0x37, 0x3D);
 
     style.Colors[ImGuiCol_Text] = ImColor(0xFF, 0xFF, 0xFF);      //普通文字
     style.Colors[ImGuiCol_TextDisabled] = ImColor(0x80, 0x80, 0x80); //禁用控件文字;
@@ -579,8 +589,6 @@ void InitImGuiContext(float fScale)
     style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.400f, 0.400f, 0.400f, 1.0f); // RGB(102, 102, 102) - Elevated hover
     style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Sunken pressed state
 
-    // Optional: If you want all buttons to have sharp corners like MFC globally
-    style.FrameRounding = 10.0f;
     // =========================================================================
 
        // ==================== 🚀 FIXED TAB HEADER MATCHING STYLE ====================
@@ -593,8 +601,6 @@ void InitImGuiContext(float fScale)
     style.Colors[ImGuiCol_Border] = ImVec4(0.450f, 0.460f, 0.470f, 1.0f); // Sharp contrast gray for wireframe lines
 
     // 3. Geometry Tweak (Enabling Tab Border)
-    style.TabRounding = 4.0f; // Rounded tops
-    style.TabBorderSize = 1.0f; // 💡 CHANGED: Force 1-pixel frame around the tab headers
     // ============================================================================
 
         // ==================== 🚀 DARK TOOLTIP BACKGROUND ====================
@@ -605,12 +611,12 @@ void InitImGuiContext(float fScale)
     style.Colors[ImGuiCol_Border] = ImVec4(0.350f, 0.350f, 0.360f, 1.0f); // Sleek charcoal border
     style.PopupBorderSize = 1.0f; // Force a 1-pixel outline on popups/tooltips
     // ====================================================================
-
+#endif
 
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
-        style.WindowRounding = 0.0f;
+        style.WindowRounding = 10.0f;
         style.Colors[ImGuiCol_WindowBg].w = 1.f;
     }
 

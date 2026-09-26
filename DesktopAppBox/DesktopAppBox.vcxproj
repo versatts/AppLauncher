@@ -152,6 +152,7 @@
   <ItemGroup>
     <ClInclude Include="FolderUI.h" />
     <ClInclude Include="FolderUIData.h" />
+    <ClInclude Include="ImGuiObj.h" />
     <ClInclude Include="link.h" />
     <ClInclude Include="monitor.h" />
     <ClInclude Include="ResLoader.h" />
@@ -160,6 +161,7 @@
   <ItemGroup>
     <ClCompile Include="FolderUI.cpp" />
     <ClCompile Include="FolderUIData.cpp" />
+    <ClCompile Include="ImGuiObj.cpp" />
     <ClCompile Include="link.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ResLoader.cpp" />
