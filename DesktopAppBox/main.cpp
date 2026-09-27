@@ -11,6 +11,8 @@
 #include <tchar.h>
 #include <vector>
 #include <algorithm>
+#include <chrono>
+#include <ctime>
 
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
@@ -28,6 +30,7 @@ static IDXGISwapChain*          g_pSwapChain = nullptr;
 static bool                     g_SwapChainOccluded = false;
 static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
 static ID3D11RenderTargetView*  g_mainRenderTargetView = nullptr;
+ImFont* g_TitleTimeFont = nullptr;
 
 void InitImGuiContext(float);
 // Forward declarations of helper functions
@@ -246,7 +249,53 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             static bool bOpen = true;
             if (bOpen)
             {
-                ImGui::Begin("-AppBox-", &bOpen, win_flags);
+                //ImGui::Begin("-AppBox-", &bOpen, win_flags);
+// 1. 🎯 核心修正：使用 C++17 標準語法獲取並格式化當前時間
+                auto now = std::chrono::system_clock::now();
+                std::time_t time_now = std::chrono::system_clock::to_time_t(now);
+                std::tm tm_now;
+
+                // 使用安全執行緒的 localtime_s (Windows 環境專用標配)
+                localtime_s(&tm_now, &time_now);
+
+                // 格式化字串緩衝區
+                char timeBuffer[64];
+                // %Y-%m-%d: 2026-09-27 | %a: 星期幾縮寫 (如 Sun) | %H:%M:%S: 時分秒
+                std::strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d (%a) %H:%M:%S", &tm_now);
+
+                // 2. 開啟視窗。使用 "###-AppBox-" 隱藏預設文字，防止與我們手動畫的字疊在一起
+                ImGui::Begin("###-AppBox-", &bOpen, win_flags);
+
+                // 3. 取得畫布與視窗幾何資訊
+                ImDrawList* drawList = ImGui::GetForegroundDrawList();
+                ImVec2 winPos = ImGui::GetWindowPos();
+                float winWidth = ImGui::GetWindowWidth();
+
+                // 計算 Title bar 的高度 (字體高度 + 2 * 上下邊距)
+                float titleBarHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
+
+                // 🎯 核心鎖定：只在標題列計算與繪製時切換字體
+                ImGui::PushFont(g_TitleTimeFont); // 🔴 切換至 Consolas 數字字體
+
+                // A. 計算時間字串的渲染寬度
+                ImVec2 textSize = ImGui::CalcTextSize(timeBuffer);
+
+                // B. 計算靠右的 X 座標：視窗右緣 - 右側留白邊距
+                // 如果有 [X] 關閉按鈕，右邊留 45px 避免重疊，沒有則留 15px
+                float rightMargin = bOpen ? 45.0f : 15.0f;
+                ImVec2 textPos;
+                textPos.x = winPos.x + winWidth - textSize.x - rightMargin;
+                textPos.y = winPos.y + (titleBarHeight - textSize.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
+
+                // C. 繪製右側時間文字
+                drawList->AddText(textPos, IM_COL32(220, 220, 220, 255), timeBuffer);
+
+                // D. 繪製左側原本的視窗標題名稱 "-AppBox-" (也可以共享這個好看字體)
+                ImVec2 leftTextPos(winPos.x + titleBarHeight, textPos.y);
+                drawList->AddText(leftTextPos, IM_COL32(255, 255, 255, 255), "-AppBox-");
+
+                ImGui::PopFont(); // 🟢 立刻還原！這行之後的所有內容都會變回原本的預設字體
+
 
                 // ==================== 🚀 修正版：Win32 主視窗跟隨折疊縮放（強制置底） ====================
                 static bool lastCollapsedState = false;
@@ -744,4 +793,7 @@ void InitImGuiContext(float fScale)
         io.Fonts->AddFontDefault();
     }
 
+    g_TitleTimeFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consolab.ttf", 16.0f);
+
+  //  io.Fonts->Build();
 }
