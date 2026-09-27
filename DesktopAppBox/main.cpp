@@ -288,11 +288,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 textPos.y = winPos.y + (titleBarHeight - textSize.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
 
                 // C. 繪製右側時間文字
-                drawList->AddText(textPos, IM_COL32(220, 220, 220, 255), timeBuffer);
+                drawList->AddText(textPos, IM_COL32(233, 233, 233, 255), timeBuffer);
 
                 // D. 繪製左側原本的視窗標題名稱 "-AppBox-" (也可以共享這個好看字體)
                 ImVec2 leftTextPos(winPos.x + titleBarHeight, textPos.y);
-                drawList->AddText(leftTextPos, IM_COL32(255, 255, 255, 255), "-AppBox-");
+                drawList->AddText(leftTextPos, IM_COL32(233, 233, 233, 255), "-AppBox-");
 
                 ImGui::PopFont(); // 🟢 立刻還原！這行之後的所有內容都會變回原本的預設字體
 
@@ -698,6 +698,11 @@ void InitImGuiContext(float fScale)
     colors[ImGuiCol_Button] = ChangeColorBrightness(accClr, 0.7);
     colors[ImGuiCol_ButtonActive] = ChangeColorBrightness(accClr, 0.8);
     colors[ImGuiCol_ButtonHovered] = ChangeColorBrightness(accClr, 1.1);
+
+    colors[ImGuiCol_ScrollbarBg] = ChangeColorBrightness(accClr, 0.7);
+    colors[ImGuiCol_ScrollbarGrab] = ChangeColorBrightness(accClr, 0.8);
+    colors[ImGuiCol_ScrollbarGrabHovered] = ChangeColorBrightness(accClr, 1.1);
+    colors[ImGuiCol_ScrollbarGrabActive] = ChangeColorBrightness(accClr, 1.1);
 
     // 3. 自動計算「文字反差色」
     // 解析出 RGB 的 0.0f - 1.0f 數值
