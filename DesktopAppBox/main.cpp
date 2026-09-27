@@ -184,7 +184,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // ==================================================================
 
     // Our state
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 0.00f);
+    ImVec4 clear_color = ImVec4(1.0f, 1.0f, 1.0f, 0.0f);
 
     // Main loop
     bool done = false;

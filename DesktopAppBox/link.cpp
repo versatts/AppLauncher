@@ -5,6 +5,9 @@
 #include <tchar.h>
 #pragma comment(lib, "Shlwapi.lib")
 
+#include <shobjidl.h>
+#include <shlobj.h>
+#include <wrl/client.h> // 使用 Microsoft::WRL::ComPtr 自動釋放資源
 
 // 從 Windows 註冊表獲取當前系統強調色，並返回 "#RRGGBB" 格式字串
 std::string GetWindowsAccentColor() {
@@ -179,39 +182,51 @@ bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize
     // 初始化緩衝區
     outExePath[0] = L'\0';
 
-    IShellLinkW* pShellLink = nullptr;
-    IPersistFile* pPersistFile = nullptr;
+    Microsoft::WRL::ComPtr<IShellLinkW> pShellLink;
+    Microsoft::WRL::ComPtr<IPersistFile> pPersistFile;
 
-    HRESULT hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLinkW, (void**)&pShellLink);
+    HRESULT hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pShellLink));
     if (FAILED(hr)) return false;
 
-    hr = pShellLink->QueryInterface(IID_IPersistFile, (void**)&pPersistFile);
-    if (FAILED(hr)) {
-        pShellLink->Release();
-        return false;
-    }
+    hr = pShellLink.As(&pPersistFile);
+    if (FAILED(hr)) return false;
 
-    // 載入 lnk 檔案
+    // 載入 lnk 檔案（嚴格檢查必須是 S_OK，防範 S_FALSE 初始化未完成風險）
     hr = pPersistFile->Load(lnkFullPath, STGM_READ);
-    if (SUCCEEDED(hr))
-    {
-        // 🎯 核心防禦：加入 SLR_NOSEARCH 與 SLR_NOTRACK，
-        // 告訴系統「絕對不要」花時間去連線網路或修復路徑，防止卡死。
-        pShellLink->Resolve(nullptr, SLR_NO_UI | SLR_NOTRACK | SLR_NOSEARCH);
+    if (hr != S_OK) return false;
 
-        // 🎯 核心修正：使用 SLGP_RAWPATH 旗標
-        // 不去檢查目標是檔案還是資料夾，也不管網路通不通，直接抓取原始路徑字串
-        // 這能 100% 完美撈出 "D:\mydir" 或 "\\192.168.1.1\mydir"
-        WIN32_FIND_DATAW wfd = { 0 };
-        hr = pShellLink->GetPath(outExePath, outPathBufSize, &wfd, SLGP_RAWPATH);
+    // 🎯 核心防禦：加入 SLR_NOSEARCH 與 SLR_NOTRACK，絕對不要花時間去連線網路或修復路徑，防止卡死。
+    pShellLink->Resolve(nullptr, SLR_NO_UI | SLR_NOTRACK | SLR_NOSEARCH);
+
+    // 1. 優先嘗試獲取標準實體路徑（使用原本的 SLGP_RAWPATH）
+    WIN32_FIND_DATAW wfd = { 0 };
+    hr = pShellLink->GetPath(outExePath, outPathBufSize, &wfd, SLGP_RAWPATH);
+
+    // 2. 🎯 核心修正：如果實體路徑失敗或為空，代表是「此電腦」、「控制台」等虛擬物件
+    if (FAILED(hr) || outExePath[0] == L'\0')
+    {
+        PIDLIST_ABSOLUTE pIDL = nullptr;
+        // 撈取快捷方式內部的二進位 PIDL 識別碼
+        if (SUCCEEDED(pShellLink->GetIDList(&pIDL)) && pIDL != nullptr)
+        {
+            Microsoft::WRL::ComPtr<IShellItem> pShellItem;
+            // 將 PIDL 轉換成 IShellItem 物件
+            if (SUCCEEDED(SHCreateItemFromIDList(pIDL, IID_PPV_ARGS(&pShellItem))))
+            {
+                LPWSTR pszName = nullptr;
+                // 🎯 關鍵防禦：要求取得可用於 ShellExecuteW 導航的完整解析名稱 (如 shell:::{GUID})
+                if (SUCCEEDED(pShellItem->GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING, &pszName)))
+                {
+                    wcsncpy_s(outExePath, outPathBufSize, pszName, _TRUNCATE);
+                    CoTaskMemFree(pszName); // 釋放系統分配的字串記憶體
+                }
+            }
+            CoTaskMemFree(pIDL); // 釋放 PIDL 記憶體
+        }
     }
 
-    // 確保物件安全釋放
-    if (pPersistFile) pPersistFile->Release();
-    if (pShellLink) pShellLink->Release();
-
-    // 檢查最終回傳結果，必須成功且路徑不為空
-    return SUCCEEDED(hr) && (wcslen(outExePath) > 0);
+    // 檢查最終回傳結果，確保路徑不為空
+    return (outExePath[0] != L'\0');
 }
 
 // 輔助函式：從 Windows 註冊表自動撈出當前系統預設瀏覽器的可執行檔 (.exe) 路徑

@@ -4,6 +4,9 @@
 
 
 #include <shellapi.h> // 💡 確保有引入 ShellAPI 標頭檔
+#include <shlobj.h>
+#include <wrl/client.h>
+#include <commoncontrols.h>
 
 ResLoader::~ResLoader()
 {
@@ -391,6 +394,45 @@ BOOL CALLBACK EnumGroupIconCallback_Universal(HMODULE hMod, LPCWSTR lpszType, LP
 // 返回 false 失敗；pBlob 輸出二進位，width/height 輸出圖標尺寸
 bool ResLoader::LoadLargestIconResourceFromExe(const wchar_t* exePath, std::vector<BYTE>& pBlob, UINT& width, UINT& height)
 {
+    if (!exePath) return false;
+
+    // 🎯 核心防禦：偵測是否為「此電腦」、「控制台」等 Shell 虛擬物件路徑
+    bool isVirtual = (wcsncmp(exePath, L"::", 2) == 0 || wcsncmp(exePath, L"shell::", 7) == 0);
+
+    if (isVirtual)
+    {
+        // 1. 將虛擬字串轉回 PIDL 識別碼
+        PIDLIST_ABSOLUTE pIDL = nullptr;
+        if (FAILED(SHParseDisplayName(exePath, nullptr, &pIDL, 0, nullptr)) || !pIDL)
+            return false;
+
+        HICON hIcon = nullptr;
+        IImageList* pImgList = nullptr;
+
+        // 取得系統超大圖標列表的介面 (IID_IImageList 在這裡被正確提取)
+        if (SUCCEEDED(SHGetImageList(SHIL_JUMBO, IID_IImageList, (void**)&pImgList)))
+        {
+            SHFILEINFOW sfi = { 0 };
+
+            // 🎯 關鍵修正：必須傳入 SHGFI_PIDL，告訴系統第一個參數傳入的是 pIDL 記憶體指標！
+            // 並且同時使用 SHGFI_SYSICONINDEX 要求系統返回該物件在圖標庫中的真實 Index (填入 sfi.iIcon)
+            SHGetFileInfoW((LPCWSTR)pIDL, 0, &sfi, sizeof(sfi), SHGFI_PIDL | SHGFI_SYSICONINDEX);
+
+            // 🎯 核心防禦：利用剛剛查出來的真實 sfi.iIcon 索引，從 Jumbo 庫提取出 256x256 實體 HICON 
+            pImgList->GetIcon(sfi.iIcon, ILD_TRANSPARENT, &hIcon);
+            pImgList->Release();
+        }
+        CoTaskMemFree(pIDL);
+
+        // 如果連 ImageList 都提不出 HICON，代表系統不支援或發生異常
+        if (!hIcon) return false;
+
+        // 3. 將提取成功的實體 hIcon 解包轉換為原始二進位 BMP 數據流填入 pBlob
+        bool success = ConvertHIconToBlob(hIcon, pBlob, width, height);
+        DestroyIcon(hIcon); // 記得釋放實體控制權
+        return success;
+    }
+
     HMODULE hModule = LoadLibraryExW(exePath, NULL, LOAD_LIBRARY_AS_DATAFILE/* | LOAD_LIBRARY_AS_IMAGE_RESOURCE*/);
     if (!hModule)
         return false;
@@ -493,5 +535,82 @@ bool ResLoader::LoadLargestIconResourceFromExe(const wchar_t* exePath, std::vect
 
     // 7. 釋放模組控制權並回傳成功
     FreeLibrary(hModule);
+    return true;
+}
+
+// 輔助函式：將 HICON 轉換為原始的 HBITMAP / PNG 二進位數據 blob
+bool ResLoader::ConvertHIconToBlob(HICON hIcon, std::vector<BYTE>& pBlob, UINT& width, UINT& height)
+{
+    ICONINFO iconInfo;
+    if (!GetIconInfo(hIcon, &iconInfo)) return false;
+
+    // 確保釋放 iconInfo 中的 HBITMAP 避免記憶體洩漏
+    struct BitmapGuard {
+        HBITMAP hbmColor; HBITMAP hbmMask;
+        ~BitmapGuard() { if (hbmColor) DeleteObject(hbmColor); if (hbmMask) DeleteObject(hbmMask); }
+    } guard = { iconInfo.hbmColor, iconInfo.hbmMask };
+
+    HBITMAP hBmp = iconInfo.hbmColor ? iconInfo.hbmColor : iconInfo.hbmMask;
+    if (!hBmp) return false;
+
+    BITMAP bmp;
+    if (!GetObject(hBmp, sizeof(BITMAP), &bmp)) return false;
+
+    width = bmp.bmWidth;
+    height = bmp.bmHeight;
+
+    // 計算 32-bit 彩色像素數據與 1-bit And 掩碼數據的大小
+    DWORD dwColorSize = ((bmp.bmWidth * 32 + 31) / 32) * 4 * bmp.bmHeight;
+    DWORD dwMaskSize = ((bmp.bmWidth * 1 + 31) / 32) * 4 * bmp.bmHeight;
+
+    // 分配目標記憶體：BITMAPINFOHEADER (40 萬) + 彩色數據 + 遮罩數據
+    DWORD dwTotalSize = sizeof(BITMAPINFOHEADER) + dwColorSize + dwMaskSize;
+    pBlob.resize(dwTotalSize);
+
+    // 1. 建立 32-bit RGBA 點陣圖資訊標頭 (BITMAPINFOHEADER)
+    BITMAPINFOHEADER bi = { 0 };
+    bi.biSize = sizeof(BITMAPINFOHEADER);
+    bi.biWidth = bmp.bmWidth;
+    // 🎯 核心設計：圖標資源（RT_ICON）的 biHeight 必須是彩色圖高的 2 倍
+    bi.biHeight = bmp.bmHeight * 2;
+    bi.biPlanes = 1;
+    bi.biBitCount = 32;
+    bi.biCompression = BI_RGB;
+
+    // 將 40 位元組的 BITMAPINFOHEADER 拷貝至 pBlob 開頭
+    memcpy(pBlob.data(), &bi, sizeof(BITMAPINFOHEADER));
+
+    HDC hDC = GetDC(nullptr);
+
+    // 2. 提取彩色像素數據 (XOR 掩碼)
+    // 建立一個安全、帶有足夠緩衝區的 BITMAPINFO 結構，避免 GetDIBits 踩壞 Stack
+    struct {
+        BITMAPINFOHEADER bmiHeader;
+        RGBQUAD bmiColors[256]; // 預留最大顏色表，確保不論如何都不會 Stack Overflow
+    } safeBmi;
+
+    memset(&safeBmi, 0, sizeof(safeBmi));
+    safeBmi.bmiHeader = bi;
+    safeBmi.bmiHeader.biHeight = bmp.bmHeight; // 讀取數據時要用單倍高
+
+    GetDIBits(hDC, hBmp, 0, bmp.bmHeight, pBlob.data() + sizeof(BITMAPINFOHEADER), (BITMAPINFO*)&safeBmi, DIB_RGB_COLORS);
+
+    // 3. 🎯 核心修正：安全提取透明掩碼數據 (AND 掩碼)
+    if (iconInfo.hbmMask)
+    {
+        // 重新設定為 1-bit 圖標資訊，並在 safeBmi 中自動保留了 1-bit 所需的 2 個色彩表空間
+        safeBmi.bmiHeader.biBitCount = 1;
+        safeBmi.bmiHeader.biCompression = BI_RGB;
+
+        // 執行 GetDIBits，此時內部的色彩表寫入會安全地落在 safeBmi.bmiColors 內，絕對不會造成毀損
+        GetDIBits(hDC, iconInfo.hbmMask, 0, bmp.bmHeight, pBlob.data() + sizeof(BITMAPINFOHEADER) + dwColorSize, (BITMAPINFO*)&safeBmi, DIB_RGB_COLORS);
+    }
+    else
+    {
+        // 如果原本就沒有 Mask，則全部填滿 0x00
+        memset(pBlob.data() + sizeof(BITMAPINFOHEADER) + dwColorSize, 0, dwMaskSize);
+    }
+
+    ReleaseDC(nullptr, hDC);
     return true;
 }
