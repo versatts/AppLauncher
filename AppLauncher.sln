@@ -6,6 +6,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AppLauncher", "AppLauncher\AppLauncher.vcxproj", "{6BD000F3-1C85-4A22-A3C3-211617C92A8B}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DesktopAppBox", "DesktopAppBox\DesktopAppBox.vcxproj", "{26367610-2EFF-4A52-AAC6-28CCDCF05F40}"
+	ProjectSection(ProjectDependencies) = postProject
+		{7604113A-AB6D-41EF-8B72-AB6240A1F23C} = {7604113A-AB6D-41EF-8B72-AB6240A1F23C}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ImGuiStatic", "ImGuiStatic\ImGuiStatic.vcxproj", "{7604113A-AB6D-41EF-8B72-AB6240A1F23C}"
 EndProject
