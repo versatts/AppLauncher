@@ -624,9 +624,18 @@ void InitImGuiContext(float fScale)
     // 2. 核心背景色設置
     // 視窗背景 (WindowBg) 與 標題列 (TitleBg) 都套用系統主色
     colors[ImGuiCol_WindowBg] = ChangeColorBrightness(accClr, 0.5);
-    colors[ImGuiCol_TitleBg] = IMCLR("#AAAAAA");
+    colors[ImGuiCol_FrameBg] = ChangeColorBrightness(accClr, 0.8);
+    colors[ImGuiCol_TitleBg] = ChangeColorBrightness(accClr, 0.3);
     colors[ImGuiCol_TitleBgActive] = accClr;
-    colors[ImGuiCol_TitleBgCollapsed] = IMVEC4(winColorStr, 0.7f); // 折疊時稍微帶點透明度
+    colors[ImGuiCol_TitleBgCollapsed] = IMVEC4(winColorStr, 0.4f); 
+
+    colors[ImGuiCol_Tab] = ChangeColorBrightness(accClr, 0.7);
+    colors[ImGuiCol_TabActive] = ChangeColorBrightness(accClr, 0.8);
+    colors[ImGuiCol_TabHovered] = ChangeColorBrightness(accClr, 1.1);
+
+    colors[ImGuiCol_Button] = ChangeColorBrightness(accClr, 0.8);
+    colors[ImGuiCol_ButtonActive] = ChangeColorBrightness(accClr, 0.8);
+    colors[ImGuiCol_ButtonHovered] = ChangeColorBrightness(accClr, 1.1);
 
     // 3. 自動計算「文字反差色」
     // 解析出 RGB 的 0.0f - 1.0f 數值
