@@ -308,7 +308,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             {
                 // 強制在下一幀打開名為 "ExitConfirmation" 的模態視窗
                 ImGui::OpenPopup("ExitConfirmation");
+
+                // 1. 获取主窗口（视口）的中心点坐标
+                ImGuiViewport* viewport = ImGui::GetMainViewport();
+                ImVec2 center = ImVec2(
+                    viewport->Pos.x + viewport->Size.x * 0.5f,
+                    viewport->Pos.y + viewport->Size.y * 0.5f
+                );
+
+                // 2. 设置下一个窗口（即即将弹出的 Modal）的中心点对齐到刚才计算的中心点
+                // ImVec2(0.5f, 0.5f) 表示将窗口自身的中心点（轴心）对齐到目标坐标
+                ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
             }
+
 
             // 開始繪製模態視窗（這會自動讓背景變暗且無法點擊主視窗）
             if (ImGui::BeginPopupModal("ExitConfirmation", NULL, ImGuiWindowFlags_AlwaysAutoResize))
@@ -633,7 +646,7 @@ void InitImGuiContext(float fScale)
     colors[ImGuiCol_TabActive] = ChangeColorBrightness(accClr, 0.8);
     colors[ImGuiCol_TabHovered] = ChangeColorBrightness(accClr, 1.1);
 
-    colors[ImGuiCol_Button] = ChangeColorBrightness(accClr, 0.8);
+    colors[ImGuiCol_Button] = ChangeColorBrightness(accClr, 0.7);
     colors[ImGuiCol_ButtonActive] = ChangeColorBrightness(accClr, 0.8);
     colors[ImGuiCol_ButtonHovered] = ChangeColorBrightness(accClr, 1.1);
 
