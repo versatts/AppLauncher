@@ -36,6 +36,24 @@ bool IsPath(const std::string& inputStr)
 
     return false; // 代表它是常規檔案 (例如 .exe, .txt) 或無效路徑
 }
+
+void MoveAppElement(std::vector<ST_APP>& vApp, int fromIndex, int toIndex)
+{
+    if (fromIndex == toIndex || fromIndex < 0 || toIndex < 0 ||
+        fromIndex >= (int)vApp.size() || toIndex >= (int)vApp.size()) {
+        return;
+    }
+
+    // 儲存被拖曳的項目
+    ST_APP targetApp = std::move(vApp[fromIndex]);
+
+    // 從原位置刪除
+    vApp.erase(vApp.begin() + fromIndex);
+
+    // 插入到新位置
+    vApp.insert(vApp.begin() + toIndex, std::move(targetApp));
+}
+
 void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 {
     if (fud.m_pIdx == nullptr)
@@ -111,6 +129,9 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 
         float maxCalculatedY = startCursorPos.y; // 用於追蹤最後一行的最大高度位置
 
+        int moveFrom = -1;
+        int moveTo = -1;
+
         for (size_t i = 0; i < fud.gpvApp->size(); ++i)
         {
             auto& a = (*fud.gpvApp)[i];
@@ -135,14 +156,6 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             ImGui::SetCursorPosX(targetX);
             ImGui::SetCursorPosY(targetY);
 
-            // 解析路徑檔名
-            std::string sTip;
-            int size_needed = WideCharToMultiByte(CP_UTF8, 0, a.exePathBuf, -1, NULL, 0, NULL, NULL);
-            if (size_needed > 0) {
-                sTip.resize(size_needed - 1);
-                WideCharToMultiByte(CP_UTF8, 0, a.exePathBuf, -1, &sTip[0], size_needed, NULL, NULL);
-            }
-
             std::string displayName = a.sDisplay;
 
             // A. 繪製 ImageButton
@@ -150,6 +163,36 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             {
                 ShellExecuteW(hwnd, L"open", a.exePathBuf, nullptr, nullptr, SW_SHOW);
             }
+
+
+            // ==================== 💡 核心新增：Drag and Drop 排序邏輯 ====================
+// 1. 設定拖曳來源 (Source)
+// ImGuiSourceFlags_AllowOverlap 允許在滑鼠微動時不影響點擊，對按鈕很友善
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+            {
+                int currentIdx = (int)i;
+                // 設定傳輸的 Data，自訂一個字串標籤 "APP_GRID_ITEM"
+                ImGui::SetDragDropPayload("APP_GRID_ITEM", &currentIdx, sizeof(int));
+
+                // 拖曳時跟隨滑鼠顯示的小浮動視窗內容
+                ImGui::Text("移動: %s", displayName.c_str());
+                ImGui::EndDragDropSource();
+            }
+
+            // 2. 設定接收目標 (Target)
+            if (ImGui::BeginDragDropTarget())
+            {
+                // 當有帶著 "APP_GRID_ITEM" 標籤的物件移到此 Button 上方時
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("APP_GRID_ITEM"))
+                {
+                    int draggedIdx = *(const int*)payload->Data;
+                    moveFrom = draggedIdx;
+                    moveTo = (int)i;
+                }
+                ImGui::EndDragDropTarget();
+            }
+
+
 
             // B. 繪製下方的文字塊
             if (bShowText)
@@ -187,24 +230,31 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
                     if (ellipsisWidth < maxTextWidth)
                     {
                         std::string temp = "";
-                        for (size_t charIdx = 0; charIdx < displayName.size(); ++charIdx)
+                        size_t charIdx = 0;
+                        // 💡 修正：改用 while 完整控制 UTF-8 多位元組字元的追蹤，避免斷字造成亂碼
+                        while (charIdx < displayName.size())
                         {
+                            size_t byteCount = 1;
                             unsigned char c = displayName[charIdx];
-                            temp += displayName[charIdx];
+
                             if (c >= 0x80) {
-                                while (charIdx + 1 < displayName.size() && (static_cast<unsigned char>(displayName[charIdx + 1]) & 0xC0) == 0x80) {
-                                    charIdx++;
-                                    temp += displayName[charIdx];
-                                }
+                                if ((c & 0xE0) == 0xC0) byteCount = 2;
+                                else if ((c & 0xF0) == 0xE0) byteCount = 3;
+                                else if ((c & 0xF8) == 0xF0) byteCount = 4;
                             }
 
-                            if (ImGui::CalcTextSize(temp.c_str()).x + ellipsisWidth > maxTextWidth)
+                            if (charIdx + byteCount > displayName.size()) break;
+
+                            std::string nextChar = displayName.substr(charIdx, byteCount);
+                            if (ImGui::CalcTextSize((temp + nextChar).c_str()).x + ellipsisWidth > maxTextWidth)
                             {
                                 break;
                             }
-                            finalRenderName = temp;
+
+                            temp += nextChar;
+                            charIdx += byteCount;
                         }
-                        finalRenderName += ellipsis;
+                        finalRenderName = temp + ellipsis;
                     }
                     else
                     {
@@ -223,18 +273,22 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 
             if (ImGui::IsItemHovered() || ImGui::IsMouseHoveringRect(ImGui::GetItemRectMin(), maxHoverPos))
             {
-                if (IsPath(sTip))
+                if (IsPath(a.sPath))
                 {
-                    ImGui::SetTooltip(sTip.c_str());
+                    ImGui::SetTooltip(a.sPath.c_str());
                 }
             }
         }
 
-        // 💡 修正 3：關鍵！因為你是手動 SetCursor 操作，ImGui 無法得知內容底標在哪裡。
-        // 我們必須主動將光標移到最後一行底部，並放置一個 Dummy 空白元件，來告訴 Child 視窗「內容到底了」，進而安全地觸發內部滾動條。
-        //if (!fud.gpvApp->empty())
+
+        if (moveFrom != -1 && moveTo != -1)
         {
-            ImGui::SetCursorPosY(maxCalculatedY + itemSpacingY);
+            MoveAppElement(*fud.gpvApp, moveFrom, moveTo);
+        }
+       
+        // 我們必須主動將光標移到最後一行底部，並放置一個 Dummy 空白元件，來告訴 Child 視窗「內容到底了」，進而安全地觸發內部滾動條。
+        {
+            ImGui::SetCursorPosY(maxCalculatedY);
             ImGui::Dummy(ImVec2(0.0f, 1.0f));
         }
     }

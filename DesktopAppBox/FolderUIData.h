@@ -17,6 +17,7 @@ struct ST_APP
     ID3D11ShaderResourceView* iconSrv;
     WCHAR exePathBuf[INTERNET_MAX_URL_LENGTH] = { 0 };
     std::string sDisplay;
+    std::string sPath;
 };
 
 struct ST_FOLDER

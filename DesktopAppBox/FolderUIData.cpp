@@ -83,6 +83,22 @@ void FolderUIData::MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::
             item.iconSrv = pRL->LoadHighestResIconSRV(pd3dDevice, iconPath, w, h);
 
             item.sDisplay = GetUtf8FileNameFromWstring(path);
+
+            std::string sTemp;
+            int size_needed = WideCharToMultiByte(CP_UTF8, 0, item.exePathBuf, -1, NULL, 0, NULL, NULL);
+            if (size_needed > 0) {
+                sTemp.resize(size_needed - 1);
+                WideCharToMultiByte(CP_UTF8, 0, item.exePathBuf, -1, &sTemp[0], size_needed, NULL, NULL);
+            }
+
+            int pos = sTemp.length() - 4;
+            if ((sTemp.find(".exe") == pos) || (sTemp.find(".ico") == pos))
+            {
+            }
+            else
+            {
+                item.sPath = sTemp;
+            }
             folder.vApp.push_back(item);
         }
     }
