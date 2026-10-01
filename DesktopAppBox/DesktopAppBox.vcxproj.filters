@@ -13,6 +13,7 @@
     <ClInclude Include="FolderUI.h" />
     <ClInclude Include="FolderUIData.h" />
     <ClInclude Include="ImGuiObj.h" />
+    <ClInclude Include="Application.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -24,6 +25,7 @@
     <ClCompile Include="FolderUI.cpp" />
     <ClCompile Include="FolderUIData.cpp" />
     <ClCompile Include="ImGuiObj.cpp" />
+    <ClCompile Include="Application.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.txt" />
