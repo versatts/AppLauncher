@@ -98,6 +98,30 @@ ID3D11ShaderResourceView* ResLoader::LoadHighestResIconSRV(ID3D11Device* pDevice
     }
 
     // =========================================================================
+    // 💡 新增攔截 ── 判斷是否為純 .png 檔案：讀入後走 WIC 解碼（與 exe 內嵌 PNG 圖標同一條路）
+    // =========================================================================
+    if (pathLen > 4 && _wcsicmp(exePath + pathLen - 4, L".png") == 0)
+    {
+        HANDLE hFile = ::CreateFileW(exePath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile == INVALID_HANDLE_VALUE)
+            return nullptr;
+
+        LARGE_INTEGER fileSize = {};
+        ID3D11ShaderResourceView* pSRV = nullptr;
+        if (::GetFileSizeEx(hFile, &fileSize) && fileSize.QuadPart > 0 && fileSize.QuadPart <= 64 * 1024 * 1024) // 64MB 防禦
+        {
+            std::vector<BYTE> pngBlob((size_t)fileSize.QuadPart);
+            DWORD bytesRead = 0;
+            if (::ReadFile(hFile, pngBlob.data(), (DWORD)pngBlob.size(), &bytesRead, nullptr) && bytesRead == pngBlob.size())
+            {
+                pSRV = CreateSRVFromPngBlob(pDevice, pngBlob, outW, outH);
+            }
+        }
+        ::CloseHandle(hFile);
+        return pSRV;
+    }
+
+    // =========================================================================
     // 💡 原有邏輯 ── 處理標準 .exe / .dll 內部資源 (保持不變)
     // =========================================================================
     std::vector<BYTE> iconBlob;
@@ -249,14 +273,33 @@ ID3D11ShaderResourceView* ResLoader::IconToD3D11SRV_Simple(ID3D11Device* pDevice
     ICONINFO iconInfo;
     if (!GetIconInfo(hIcon, &iconInfo)) return nullptr;
 
-    BITMAP bm;
-    GetObject(iconInfo.hbmColor, sizeof(bm), &bm);
-    outW = bm.bmWidth;
-    outH = bm.bmHeight;
+    // RAII 守衛：不論後續任何提前 return，都保證釋放 GetIconInfo 產生的兩張 HBITMAP
+    struct BmpGuard {
+        HBITMAP hbmColor, hbmMask;
+        ~BmpGuard() { if (hbmColor) DeleteObject(hbmColor); if (hbmMask) DeleteObject(hbmMask); }
+    } guard = { iconInfo.hbmColor, iconInfo.hbmMask };
 
-    HDC hdc = GetDC(NULL);
-    HDC hMemDC = CreateCompatibleDC(hdc);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, iconInfo.hbmColor);
+    // 💡 修正 1：檢查 GetObject 返回值，防範未初始化的 BITMAP 導致隨機寬高
+    BITMAP bmColor = {};
+    bool hasColor = iconInfo.hbmColor && GetObject(iconInfo.hbmColor, sizeof(bmColor), &bmColor) == (int)sizeof(bmColor);
+
+    // 💡 修正 2：單色圖標沒有 hbmColor，尺寸從 mask 取（mask 高度是彩色圖的 2 倍：XOR + AND）
+    BITMAP bmMask = {};
+    bool hasMask = iconInfo.hbmMask && GetObject(iconInfo.hbmMask, sizeof(bmMask), &bmMask) == (int)sizeof(bmMask);
+
+    if (!hasColor && !hasMask) return nullptr;
+
+    if (hasColor)
+    {
+        outW = bmColor.bmWidth;
+        outH = bmColor.bmHeight;
+    }
+    else
+    {
+        outW = bmMask.bmWidth;
+        outH = bmMask.bmHeight / 2;
+    }
+    if (outW <= 0 || outH <= 0) return nullptr;
 
     std::vector<DWORD> pixels(outW * outH);
     BITMAPINFO bmi = {};
@@ -267,7 +310,38 @@ ID3D11ShaderResourceView* ResLoader::IconToD3D11SRV_Simple(ID3D11Device* pDevice
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
-    GetDIBits(hMemDC, iconInfo.hbmColor, 0, outH, pixels.data(), &bmi, DIB_RGB_COLORS);
+    bool gotPixels = false;
+    if (hasColor)
+    {
+        // 彩色圖標：直接從 hbmColor 提取 32bpp 像素（不選入 DC，符合 GetDIBits 文檔要求）
+        HDC hdc = GetDC(NULL);
+        gotPixels = (GetDIBits(hdc, iconInfo.hbmColor, 0, outH, pixels.data(), &bmi, DIB_RGB_COLORS) == outH);
+        ReleaseDC(NULL, hdc);
+    }
+
+    if (!gotPixels)
+    {
+        // 💡 修正 3：單色圖標（hbmColor == NULL）或 GetDIBits 失敗的降級路徑：
+        // 建立 32bpp DIB，用 DrawIconEx 走 GDI 標準繪製（自動套用 AND mask 透明），
+        // 避免直接讀取不存在的彩色點陣圖造成越界崩潰
+        HDC hdc = GetDC(NULL);
+        VOID* pBits = nullptr;
+        HBITMAP hDib = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
+        if (hDib && pBits)
+        {
+            memset(pBits, 0, (size_t)outW * outH * 4); // 先清為全透明
+            HDC hMemDC = CreateCompatibleDC(hdc);
+            HGDIOBJ hOldBmp = SelectObject(hMemDC, hDib);
+            DrawIconEx(hMemDC, 0, 0, hIcon, outW, outH, 0, nullptr, DI_NORMAL);
+            memcpy(pixels.data(), pBits, (size_t)outW * outH * 4);
+            SelectObject(hMemDC, hOldBmp);
+            DeleteDC(hMemDC);
+            gotPixels = true;
+        }
+        if (hDib) DeleteObject(hDib);
+        ReleaseDC(NULL, hdc);
+    }
+    if (!gotPixels) return nullptr;
 
     // ==================== 🚀 核心修復：檢查並修復全透明 Bug ====================
     bool hasAlpha = false;
@@ -323,12 +397,6 @@ ID3D11ShaderResourceView* ResLoader::IconToD3D11SRV_Simple(ID3D11Device* pDevice
         }
         pTex->Release();
     }
-
-    SelectObject(hMemDC, hOldBmp);
-    DeleteDC(hMemDC);
-    ReleaseDC(NULL, hdc);
-    DeleteObject(iconInfo.hbmColor);
-    DeleteObject(iconInfo.hbmMask);
 
     m_vRes.push_back(pSRV);
     return pSRV;

@@ -45,17 +45,29 @@ std::string GetWindowsAccentColor() {
 
 bool CheckSpecificIcon(const std::wstring& exePath, std::wstring& sIcon)
 {
-    sIcon = exePath;
-    sIcon = sIcon.substr(0, sIcon.length() - 4);
-    sIcon += L".ico";
+    if (exePath.length() < 4) return false;
 
-    // 取得檔案屬性
-    DWORD dwAttrib = GetFileAttributesW(sIcon.c_str());
+    std::wstring stem = exePath.substr(0, exePath.length() - 4);
 
-    // 1. 如果回傳 INVALID_FILE_ATTRIBUTES，代表檔案不存在（或路徑無效、無權限訪問）
-    // 2. 確保該路徑是一個「檔案」，而不是一個「資料夾 (Directory)」
-    return (dwAttrib != INVALID_FILE_ATTRIBUTES &&
-        !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
+    // 依序嘗試同名 .ico / .png 覆蓋圖標
+    const wchar_t* exts[] = { L".png", L".ico" };
+    for (const wchar_t* ext : exts)
+    {
+        std::wstring candidate = stem + ext;
+
+        // 取得檔案屬性
+        DWORD dwAttrib = GetFileAttributesW(candidate.c_str());
+
+        // 1. 如果回傳 INVALID_FILE_ATTRIBUTES，代表檔案不存在（或路徑無效、無權限訪問）
+        // 2. 確保該路徑是一個「檔案」，而不是一個「資料夾 (Directory)」
+        if (dwAttrib != INVALID_FILE_ATTRIBUTES &&
+            !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY))
+        {
+            sIcon = candidate;
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

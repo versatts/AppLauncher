@@ -37,21 +37,22 @@ void FolderUIData::MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::
     {
         ST_APP item;
         bool resolved = false;
-        WCHAR iconPath[MAX_PATH] = { 0 };
+        WCHAR iconPath[INTERNET_MAX_URL_LENGTH] = { 0 };
 
-        // 判斷是否為 Steam 的 .url 快捷方式
+        // 不論 .url 還是 .lnk，最先嘗試同名 .ico 覆蓋圖標
+        std::wstring sIcon;
+        if (CheckSpecificIcon(path, sIcon))
+        {
+            wcsncpy_s(iconPath, sIcon.c_str(), INTERNET_MAX_URL_LENGTH);
+            resolved = true;
+        }
+
+        // 再依副檔名解析啟動目標（exePathBuf 不受圖標影響，始終解析）
         if (path.size() > 4 && _wcsicmp(path.c_str() + path.size() - 4, L".url") == 0)
         {
-            std::wstring sIcon;
-            if (CheckSpecificIcon(path, sIcon))
-            {
-                wcsncpy_s(iconPath, sIcon.c_str(), INTERNET_MAX_URL_LENGTH);
-                resolved = true;
-            }
-            // 解析 URL 機制
-
-            WCHAR iconPath2[MAX_PATH] = { 0 };
-            bool bRet = ResolveUrlTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH, iconPath2, MAX_PATH);
+            // .url：解析 URL 機制
+            WCHAR iconPath2[INTERNET_MAX_URL_LENGTH] = { 0 };
+            bool bRet = ResolveUrlTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH, iconPath2, INTERNET_MAX_URL_LENGTH);
             if (!resolved && bRet)
             {
                 wcsncpy_s(iconPath, iconPath2, INTERNET_MAX_URL_LENGTH);
@@ -60,13 +61,7 @@ void FolderUIData::MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::
         }
         else
         {
-            std::wstring sIcon;
-            if (CheckSpecificIcon(path, sIcon))
-            {
-                wcsncpy_s(iconPath, sIcon.c_str(), INTERNET_MAX_URL_LENGTH);
-                resolved = true;
-            }
-            // 原有的 .lnk 解析機制
+            // .lnk：解析實體路徑
             bool bRet = ResolveLnkTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH);
             if (!resolved && bRet)
             {
