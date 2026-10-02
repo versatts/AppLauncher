@@ -105,6 +105,8 @@ void Application::InitImGuiContext(float fScale)
     style.FramePadding.y = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
     style.FrameRounding = 10.0f;
 
+    style.ScrollbarSize = 5.0f; // 🚀 細滾動條（配合 FolderUI 的自動隱藏滾動條；須在 ScaleAllSizes 之後設定）
+
     style.TabRounding = 3.0f; // Rounded tops
     style.TabBorderSize = 0.0f; // 💡 CHANGED: Force 1-pixel frame around the tab headers
 
@@ -132,6 +134,13 @@ void Application::InitImGuiContext(float fScale)
     colors[ImGuiCol_Tab] = ChangeColorBrightness(accClr, 0.7);
     colors[ImGuiCol_TabActive] = ChangeColorBrightness(accClr, 0.8);
     colors[ImGuiCol_TabHovered] = ChangeColorBrightness(accClr, 1.1);
+
+    // 🚀 滾動條顏色：5px 細滾動條需要高對比，正常狀態的滑塊(grab)也要清晰可見
+    //    （Classic 主題預設的 grab 在深色背景上幾乎看不見，hover 時才亮）
+    colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
+    colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.90f, 0.90f, 0.90f, 0.85f);
+    colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(1.00f, 1.00f, 1.00f, 0.95f);
+    colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 
     colors[ImGuiCol_Button] = ChangeColorBrightness(accClr, 0.7);
     colors[ImGuiCol_ButtonActive] = ChangeColorBrightness(accClr, 0.8);

@@ -100,8 +100,9 @@ namespace
             g.totalCellHeight = g.buttonHeight + g.textGap + g.textBlockHeight;
         }
 
-        // 💡 取得當前「子視窗」內部真正的可用總寬度，防止計算換行時跑版
-        float windowWidth = ImGui::GetContentRegionAvail().x;
+        // 💡 穩定寬度：GetContentRegionAvail().x 是動態值（滾動條出現時自動扣減），
+        //    這裡改用子視窗自身總寬 GetWindowSize().x（恆定，滾動條僅懸浮不佔位）
+        float windowWidth = ImGui::GetWindowSize().x;
 
         g.maxItemsPerRow = (int)((windowWidth - (g.minPadding * 2.0f) + g.itemSpacingX) / (g.buttonWidth + g.itemSpacingX));
         if (g.maxItemsPerRow < 1) g.maxItemsPerRow = 1;
@@ -117,8 +118,12 @@ namespace
             totalItemsWidth = g.buttonWidth;
         }
 
+        // 💡 絕對居中：dynamicPadding 直接是「按鈕塊左緣的視窗座標」(winW - 總寬)/2，
+        //    以使用者實際看到的子視窗為基準數學對稱，左右留白嚴格相等。
+        //    不經過 WindowPadding / cursor 初始值等任何中間量（那些會隨 DPI 縮放、
+        //    邊框、主題而引入偏差），也與滾動條出現與否完全無關。
+        //    注意：SetCursorPos 使用視窗座標（相對子視窗左上角），與此口徑一致。
         g.dynamicPadding = (windowWidth - totalItemsWidth) / 2.0f;
-        if (g.dynamicPadding < g.minPadding) g.dynamicPadding = g.minPadding;
 
         // 💡 先套用頂部間距，避免內容黏在子視窗最上緣
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + g.topPadding);
@@ -367,8 +372,51 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
     char childWindowId[64];
     sprintf_s(childWindowId, "AppGridRegion_%d", idx);
 
+    // 🚀 自動隱藏滾動條：僅在「滾動後短時間內」或「滑鼠懸停在滾動條上」時顯示，
+    //    其餘時間 0.25 秒淡出至完全透明。顯示狀態在子視窗內部更新，下一幀生效。
+    static float s_sbIdle = 99.0f;   // 距離上次滾動經過的秒數
+    static bool  s_sbHover = false;  // 滑鼠上一幀是否懸停在滾動條區域
+    float sbAlpha = 1.0f;
+    if (!s_sbHover && s_sbIdle > 1.5f)
+    {
+        sbAlpha = 1.0f - (s_sbIdle - 1.5f) * 4.0f; // 停止滾動 1.5s 後開始，0.25s 內淡出
+        if (sbAlpha < 0.0f) sbAlpha = 0.0f;
+    }
+    ImVec4 cBg     = ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarBg);          cBg.w *= sbAlpha;
+    ImVec4 cGrab   = ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarGrab);        cGrab.w *= sbAlpha;
+    ImVec4 cGrabH  = ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarGrabHovered); cGrabH.w *= sbAlpha;
+    ImVec4 cGrabA  = ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarGrabActive);  cGrabA.w *= sbAlpha;
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, cBg);
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, cGrab);
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, cGrabH);
+    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, cGrabA);
+
     if (ImGui::BeginChild(childWindowId, ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, 0))
     {
+        // 🚀 更新滾動條顯示狀態（供下一幀 sbAlpha 使用）
+        {
+            static float s_lastScrollY = -1.0f;
+            float curScrollY = ImGui::GetScrollY();
+            if (curScrollY != s_lastScrollY)
+            {
+                s_sbIdle = 0.0f;          // 滾動位置變化 → 重新點亮計時
+                s_lastScrollY = curScrollY;
+            }
+            s_sbIdle += ImGui::GetIO().DeltaTime;
+
+            // 滑鼠是否懸停在滾動條區域（子視窗右緣 ScrollbarSize 寬的縱向條帶）
+            s_sbHover = false;
+            if (ImGui::GetScrollMaxY() > 0.0f)
+            {
+                ImVec2 wPos = ImGui::GetWindowPos();
+                ImVec2 wSize = ImGui::GetWindowSize();
+                ImVec2 m = ImGui::GetIO().MousePos;
+                s_sbHover = (m.x >= wPos.x + wSize.x - ImGui::GetStyle().ScrollbarSize) &&
+                            (m.x <= wPos.x + wSize.x) &&
+                            (m.y >= wPos.y) && (m.y <= wPos.y + wSize.y);
+            }
+        }
+
         GridLayout g = CalcGridLayout(fud.m_bShowName, fud.gpvApp->size());
 
         float maxCalculatedY = g.startPos.y; // 用於追蹤最後一行涵蓋的最大高度位置
@@ -390,7 +438,8 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             int row = (int)(i / g.maxItemsPerRow);
 
             // 計算當前單元的絕對 X 與 Y 座標
-            float targetX = g.startPos.x + g.dynamicPadding + (col * (g.buttonWidth + g.itemSpacingX));
+            // X 用視窗座標（dynamicPadding 已是按鈕塊左緣的視窗座標，絕對居中）
+            float targetX = g.dynamicPadding + (col * (g.buttonWidth + g.itemSpacingX));
             float targetY = g.startPos.y + (row * (g.totalCellHeight + g.itemSpacingY));
 
             // 更新最後一行涵蓋的最大高度
@@ -463,7 +512,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
                         float lx = (float)pt.x - winPos.x;
                         float ly = (float)pt.y - winPos.y;
 
-                        float baseX = g.startPos.x + g.dynamicPadding;
+                        float baseX = g.dynamicPadding;
                         float stepX = g.buttonWidth + g.itemSpacingX;
                         float stepY = g.totalCellHeight + g.itemSpacingY;
 
@@ -500,6 +549,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
         ImGui::Dummy(ImVec2(0.0f, 1.0f));
     }
     ImGui::EndChild(); // 💡 結束子視窗
+    ImGui::PopStyleColor(4); // 🚀 彈出自動隱藏滾動條的透明色
 }
 
 // ============================================================
