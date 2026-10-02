@@ -363,6 +363,18 @@ g_SwapChainOccluded = theApp.g_SwapChainOccluded;
 
                     gTabUI.Render();
 
+                    // 🚀 TAB 拖動排序：同步重排 gvFolder / gvFolderName（分頁 0 恆在第一位），
+                    //    磁碟資料夾的 "NNNN-" 前綴改名由退出時的 PersistOrder 統一完成
+                    if (gTabUI.m_pendingTabMoveFrom > 0 && gTabUI.m_pendingTabMoveTo > 0)
+                    {
+                        gFUD.MoveFolder(gTabUI.m_pendingTabMoveFrom, gTabUI.m_pendingTabMoveTo);
+                        gTabUI.m_arrTab = gFUD.gvFolderName; // 順序已更新，刷新 TAB 名列表
+                        gTabUI.m_tabBarVersion++;            // 換 TabBar ID 強制重建，介面即時套用新順序
+                        gTabUI.m_restoreCountdown = 10;     // 恢復期：持續 SetSelected 至選中對齊（含超時保護）
+                        gTabUI.m_pendingTabMoveFrom = -1;
+                        gTabUI.m_pendingTabMoveTo = -1;
+                    }
+
                     gFU.Render(hwnd, gFUD);
                 }
 
