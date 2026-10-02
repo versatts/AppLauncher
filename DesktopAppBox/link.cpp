@@ -3,6 +3,7 @@
 #include <shlwapi.h>
 #include <filesystem>
 #include <tchar.h>
+#include <algorithm>   // std::sort（排序前綴）
 #pragma comment(lib, "Shlwapi.lib")
 
 #include <shobjidl.h>
@@ -112,6 +113,89 @@ std::string GetUtf8FileNameFromWstring(const std::wstring& wpath) {
 
     return utf8_stem;
 }
+// 取得 exe 所在目錄下 lnk 資料夾的完整路徑
+// subDirName 為空 = C:\xxx\lnk；非空 = C:\xxx\lnk\子目錄名
+std::wstring GetLnkDirForFolder(const std::wstring& subDirName)
+{
+    WCHAR exeFullPath[MAX_PATH] = { 0 };
+    GetModuleFileNameW(NULL, exeFullPath, MAX_PATH);
+
+    WCHAR* pSlash = wcsrchr(exeFullPath, L'\\');
+    if (!pSlash) return L"";
+
+    std::wstring dir(exeFullPath, pSlash - exeFullPath);
+    dir += L"\\lnk";
+    if (!subDirName.empty())
+    {
+        dir += L"\\" + subDirName;
+    }
+    return dir;
+}
+
+// ===== 🚀 排序前綴工具實現 =====
+
+std::wstring StripOrderPrefix(const std::wstring& name)
+{
+    if (name.size() > 5 &&
+        iswdigit((unsigned)name[0]) && iswdigit((unsigned)name[1]) &&
+        iswdigit((unsigned)name[2]) && iswdigit((unsigned)name[3]) &&
+        name[4] == L'-')
+    {
+        return name.substr(5);
+    }
+    return name;
+}
+
+std::wstring StripOrderPrefixFromPath(const std::wstring& fullPath)
+{
+    size_t slash = fullPath.find_last_of(L"\\/");
+    if (slash == std::wstring::npos)
+    {
+        return StripOrderPrefix(fullPath);
+    }
+    return fullPath.substr(0, slash + 1) + StripOrderPrefix(fullPath.substr(slash + 1));
+}
+
+bool ParseOrderPrefix(const std::wstring& fullPath, int& outNum)
+{
+    size_t slash = fullPath.find_last_of(L"\\/");
+    const std::wstring name = (slash == std::wstring::npos) ? fullPath : fullPath.substr(slash + 1);
+
+    if (name.size() > 5 &&
+        iswdigit((unsigned)name[0]) && iswdigit((unsigned)name[1]) &&
+        iswdigit((unsigned)name[2]) && iswdigit((unsigned)name[3]) &&
+        name[4] == L'-')
+    {
+        outNum = _wtoi(name.substr(0, 4).c_str());
+        return true;
+    }
+    return false;
+}
+
+int CountLnkUrlFilesInDir(const std::wstring& dir)
+{
+    int count = 0;
+    std::wstring pattern = dir + L"\\*";
+    WIN32_FIND_DATAW fd = {};
+    HANDLE h = FindFirstFileW(pattern.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+
+        size_t len = wcslen(fd.cFileName);
+        if (len > 4 &&
+            (_wcsicmp(fd.cFileName + len - 4, L".lnk") == 0 ||
+             _wcsicmp(fd.cFileName + len - 4, L".url") == 0))
+        {
+            ++count;
+        }
+    } while (FindNextFileW(h, &fd));
+
+    FindClose(h);
+    return count;
+}
+
 // 获取当前exe所在目录下所有 *.lnk 文件的完整路径
 // subDirName: 要進入的子目錄名（若為空 L""，則在 lnk 根目錄進行搜尋）
 // outSubDirList: 輸出參數，返回當前搜尋目錄內所包含的資料夾名稱列表
@@ -183,6 +267,20 @@ std::vector<std::wstring> EnumLnkFilesInAppDir( const std::wstring& subDirName, 
             FindClose(hFind);
         }
     }
+
+    // 5. 🚀 排序：帶 "NNNN-" 前綴者按前綴數字升序（= 上次退出時持久化的顯示順序）；
+    //    無前綴者（新拖入 / 手動放入的檔案）一律排在最後，按檔名排序
+    std::sort(fileResult.begin(), fileResult.end(),
+        [](const std::wstring& a, const std::wstring& b)
+        {
+            int na = 0, nb = 0;
+            bool ha = ParseOrderPrefix(a, na);
+            bool hb = ParseOrderPrefix(b, nb);
+            if (ha && hb) return na < nb;
+            if (ha) return true;   // 有前綴的排前面
+            if (hb) return false;
+            return _wcsicmp(a.c_str(), b.c_str()) < 0; // 無前綴按檔名
+        });
 
     return fileResult;
 }

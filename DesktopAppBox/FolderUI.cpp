@@ -1,6 +1,11 @@
 ﻿#include "FolderUI.h"
 #include "FolderUIData.h"
 
+// 來自 main.cpp：檔案拖入/拖出功能總開關
+extern bool g_bEnableFileDragIO;
+// 來自 main.cpp：拖出確認後刪除 lnk 檔案，並排隊幀末熱重載當前分頁
+void AppRemoveDragOutItem(const std::wstring& lnkPath);
+
 bool IsPath(const std::string& inputStr)
 {
     if (inputStr.empty()) return false;
@@ -160,6 +165,16 @@ namespace
     }
 
     // ============================================================
+    // 🚀 拖出狀態機：拖著項目離開視窗外後進入「待確認移除」狀態
+    //    - 在視窗外鬆開滑鼠 → 直接刪除 lnk 檔案（不拖放到任何目錄）
+    //    - 拖回視窗內鬆開 → 視為普通排序，移動到鬆開點所在格子
+    //    - 按 ESC → 取消
+    // ============================================================
+    bool s_dragOutArmed = false;
+    int  s_dragOutFromIdx = -1;
+    std::wstring s_dragOutLnkPath;
+
+    // ============================================================
     // 單個 App 項目：圖標按鈕 + 點擊啟動 + 拖曳排序
     // ============================================================
     void RenderAppButton(HWND hwnd, const ST_APP& app, const char* btnId, size_t itemIdx,
@@ -178,6 +193,30 @@ namespace
 
             // 拖曳時跟隨滑鼠顯示的小浮動視窗內容
             ImGui::Text("移動: %s", app.sDisplay.c_str());
+
+            // 🚀 拖出檢測：拖著項目離開視窗客戶區一定距離後，進入「待確認移除」狀態
+            //    （窗外鬆開 = 刪除 lnk；拖回窗內鬆開 = 移位；ESC = 取消）
+            //    注意：不能用 io.MousePos 判斷——滑鼠離開客戶區後視窗收不到 WM_MOUSEMOVE，
+            //    io.MousePos 會停在邊緣不再更新，必須主動查詢全域游標位置。
+            if (g_bEnableFileDragIO && !app.sLnkPath.empty())
+            {
+                POINT pt;
+                ::GetCursorPos(&pt);
+                ::ScreenToClient(hwnd, &pt);
+                RECT rc;
+                ::GetClientRect(hwnd, &rc);
+                const int margin = 30; // 超出邊緣多少像素才觸發，避免貼著邊緣拖動排序時誤觸
+                if (pt.x < -margin || pt.y < -margin || pt.x > rc.right + margin || pt.y > rc.bottom + margin)
+                {
+                    // 結束 ImGui 內部拖曳，改由 Render 尾部的拖出狀態機接管
+                    ImGui::EndDragDropSource();
+                    s_dragOutArmed = true;
+                    s_dragOutFromIdx = (int)itemIdx;
+                    s_dragOutLnkPath = app.sLnkPath;
+                    return;
+                }
+            }
+
             ImGui::EndDragDropSource();
         }
 
@@ -337,6 +376,10 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
         int moveTo = -1;
         char szName[64];
 
+        // 每幀重建項目命中矩形（Explorer 拖入 .ico/.png 時的落點判定用）
+        m_dropRects.clear();
+        m_hoverLnkPath.clear();
+
         for (size_t i = 0; i < fud.gpvApp->size(); ++i)
         {
             auto& a = (*fud.gpvApp)[i];
@@ -361,6 +404,25 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 
             RenderAppButton(hwnd, a, szName, i, g.iconSize, moveFrom, moveTo);
 
+            // 🚀 記錄該項目的格子矩形（按鈕+文字塊，與懸停判定範圍一致；客戶區絕對座標）
+            {
+                ItemRect r;
+                ImVec2 bMin = ImGui::GetItemRectMin();
+                ImVec2 bMax = ImGui::GetItemRectMax();
+                r.MinX = bMin.x;
+                r.MinY = bMin.y;
+                r.MaxX = bMax.x;
+                r.MaxY = bMax.y + (g.bShowText ? (g.textGap + g.textBlockHeight) : 0.0f);
+                r.sLnkPath = a.sLnkPath;
+                m_dropRects.push_back(r);
+            }
+
+            // 🚀 記錄當前懸停的項目（拖放命中兜底：Explorer 拖檔懸停時 hover 正常工作）
+            if (ImGui::IsItemHovered())
+            {
+                m_hoverLnkPath = a.sLnkPath;
+            }
+
             if (g.bShowText)
             {
                 DrawTextBlock(a.sDisplay, i, g);
@@ -374,10 +436,159 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             MoveAppElement(*fud.gpvApp, moveFrom, moveTo);
         }
 
+        // ===== 🚀 拖出狀態機：鬆開滑鼠後判定「移除」或「移回排序」 =====
+        if (s_dragOutArmed)
+        {
+            if (::GetAsyncKeyState(VK_ESCAPE) & 0x8000)
+            {
+                s_dragOutArmed = false; // ESC：取消，不做任何事
+            }
+            else if (!(::GetAsyncKeyState(VK_LBUTTON) & 0x8000)) // 左鍵已鬆開
+            {
+                s_dragOutArmed = false;
+
+                POINT pt;
+                ::GetCursorPos(&pt);
+                ::ScreenToClient(hwnd, &pt);
+                RECT rc;
+                ::GetClientRect(hwnd, &rc);
+
+                if (pt.x >= 0 && pt.y >= 0 && pt.x <= rc.right && pt.y <= rc.bottom)
+                {
+                    // ===== 拖回視窗內鬆開：視為普通排序，移到鬆開點所在格子 =====
+                    if (s_dragOutFromIdx >= 0 && s_dragOutFromIdx < (int)fud.gpvApp->size())
+                    {
+                        // 子視窗絕對座標 = 客戶區座標（主視口 Pos 為 0,0）
+                        ImVec2 winPos = ImGui::GetWindowPos();
+                        float lx = (float)pt.x - winPos.x;
+                        float ly = (float)pt.y - winPos.y;
+
+                        float baseX = g.startPos.x + g.dynamicPadding;
+                        float stepX = g.buttonWidth + g.itemSpacingX;
+                        float stepY = g.totalCellHeight + g.itemSpacingY;
+
+                        // 四捨五入到最近的格子（負值一律夾到 0）
+                        int col = (int)((lx - baseX) / stepX + 0.5f);
+                        int row = (int)((ly - g.startPos.y) / stepY + 0.5f);
+                        if (col < 0) col = 0;
+                        if (row < 0) row = 0;
+                        if (col > g.maxItemsPerRow - 1) col = g.maxItemsPerRow - 1;
+
+                        int to = row * g.maxItemsPerRow + col;
+                        if (to > (int)fud.gpvApp->size() - 1) to = (int)fud.gpvApp->size() - 1;
+
+                        MoveAppElement(*fud.gpvApp, s_dragOutFromIdx, to);
+                    }
+                }
+                else
+                {
+                    // ===== 在視窗外鬆開：直接刪除該捷徑（不拖放到任何目錄）=====
+                    if (!s_dragOutLnkPath.empty())
+                    {
+                        AppRemoveDragOutItem(s_dragOutLnkPath);
+                    }
+                }
+
+                s_dragOutFromIdx = -1;
+                s_dragOutLnkPath.clear();
+            }
+        }
+
         // 我們必須主動將光標移到最後一行底部，並放置一個 Dummy 空白元件，
         // 來告訴 Child 視窗「內容到底了」，進而安全地觸發內部滾動條。
         ImGui::SetCursorPosY(maxCalculatedY);
         ImGui::Dummy(ImVec2(0.0f, 1.0f));
     }
     ImGui::EndChild(); // 💡 結束子視窗
+}
+
+// ============================================================
+// 🚀 Explorer 圖標拖入：把 .ico/.png 套用到「客戶區座標 pt 命中的項目」上
+//    拷貝到該項目 lnk/url 的同目錄，並改名為同名覆蓋圖標（已存在則覆蓋）
+// ============================================================
+
+bool FolderUI::ApplyIconToItem(POINT clientPt, const std::wstring& srcIconPath)
+{
+    // ===== 命中 1（最可靠）：最近一幀懸停的項目 =====
+    // 拖放鬆開前滑鼠必停在目標按鈕上，上一幀的 hover 即為使用者瞄準的項目；
+    // 此判定完全在 ImGui 座標體系內，不受客戶區座標換算影響
+    std::wstring targetLnk = m_hoverLnkPath;
+
+    // ===== 命中 2：放置點落入哪個項目的格子矩形 =====
+    if (targetLnk.empty())
+    {
+        for (const auto& r : m_dropRects)
+        {
+            if ((float)clientPt.x >= r.MinX && (float)clientPt.y >= r.MinY &&
+                (float)clientPt.x <= r.MaxX && (float)clientPt.y <= r.MaxY)
+            {
+                targetLnk = r.sLnkPath;
+                break;
+            }
+        }
+    }
+
+    // ===== 命中 3（兜底）：距離最近的格子 =====
+    // 容忍格子間隙/座標小偏差：取中心距離最近者，但須在 60px 半徑內，
+    // 避免拖到完全空白處時誤掛到別的項目
+    if (targetLnk.empty() && !m_dropRects.empty())
+    {
+        const ItemRect* best = nullptr;
+        float bestDist = 1e9f;
+        for (const auto& r : m_dropRects)
+        {
+            float cx = (r.MinX + r.MaxX) * 0.5f;
+            float cy = (r.MinY + r.MaxY) * 0.5f;
+            float dx = (float)clientPt.x - cx;
+            float dy = (float)clientPt.y - cy;
+            float d = dx * dx + dy * dy;
+            if (d < bestDist)
+            {
+                bestDist = d;
+                best = &r;
+            }
+        }
+        if (best && bestDist <= 60.0f * 60.0f)
+        {
+            targetLnk = best->sLnkPath;
+        }
+    }
+
+    if (targetLnk.empty())
+    {
+        return false; // 沒有命中任何項目
+    }
+
+    // 命中：解析該項目 lnk/url 的所在目錄與主檔名（含排序前綴，與磁碟一致）
+    size_t slash = targetLnk.find_last_of(L"\\/");
+    size_t dot = targetLnk.find_last_of(L'.');
+    if (slash == std::wstring::npos || dot == std::wstring::npos || dot < slash)
+    {
+        return false;
+    }
+    std::wstring stem = targetLnk.substr(slash + 1, dot - slash - 1);
+    std::wstring dir = targetLnk.substr(0, slash);
+
+    // 源圖標的副檔名（.ico / .png），過短視為無效
+    size_t sdot = srcIconPath.find_last_of(L'.');
+    if (sdot == std::wstring::npos || sdot + 4 > srcIconPath.size())
+    {
+        return false;
+    }
+    std::wstring iconExt = srcIconPath.substr(sdot);
+
+    // 🚀 保證「立即生效」：CheckSpecificIcon 的優先級是 .png > .ico，
+    //    若項目已有另一格式的同名圖標（如拖 .ico 但已存在 .png），
+    //    新拖的會被舊的搶先 → 這裡把互斥的另一格式刪掉，確保新圖標必定顯示
+    const wchar_t* otherExt = (_wcsicmp(iconExt.c_str(), L".ico") == 0) ? L".png" : L".ico";
+    std::wstring otherIcon = dir + L"\\" + stem + otherExt;
+    DWORD otherAttr = ::GetFileAttributesW(otherIcon.c_str());
+    if (otherAttr != INVALID_FILE_ATTRIBUTES && !(otherAttr & FILE_ATTRIBUTE_DIRECTORY))
+    {
+        ::DeleteFileW(otherIcon.c_str());
+    }
+
+    // 目標 = 同目錄 + 與 lnk/url 同主檔名的覆蓋圖標（同名存在則覆蓋）
+    std::wstring dstPath = dir + L"\\" + stem + iconExt;
+    return ::CopyFileW(srcIconPath.c_str(), dstPath.c_str(), FALSE) ? true : false;
 }

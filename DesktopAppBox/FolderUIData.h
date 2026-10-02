@@ -18,6 +18,7 @@ struct ST_APP
     WCHAR exePathBuf[INTERNET_MAX_URL_LENGTH] = { 0 };
     std::string sDisplay;
     std::string sPath;
+    std::wstring sLnkPath;   // 拖出用：lnk 資料夾中該捷徑檔案的完整原始路徑
 };
 
 struct ST_FOLDER
@@ -31,6 +32,13 @@ class FolderUIData
 {
 public:
     void Init(ID3D11Device* pd3dDevice, ResLoader* pRL);
+
+    // 熱重載指定分頁的捷徑資料（用於 Explorer 拖入新 .lnk/.url 後的即時刷新）
+    bool ReloadFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, int idx);
+
+    // 退出時持久化各分頁的顯示順序：把 lnk/url 檔案重命名為 "0000-原名"、"0001-原名"...
+    // 下次啟動時按前綴數字排序，即恢復本次退出時的順序
+    void PersistOrder();
     std::vector<ST_FOLDER> gvFolder;
     std::vector<ST_APP>* gpvApp = nullptr;
     std::vector<std::wstring> gvFolderName;

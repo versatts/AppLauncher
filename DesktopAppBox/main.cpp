@@ -17,6 +17,9 @@
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
 
+#include <shellapi.h>   // Explorer 檔案拖放 (WM_DROPFILES / DragQueryFileW)
+#pragma comment(lib, "shell32.lib")
+
 #include "Application.h"
 #include "link.h"
 #include "ResLoader.h"
@@ -47,6 +50,17 @@ int g_WinH = 400;
 
 FolderUIData gFUD;
 FolderUI gFU;
+
+// ============================================================
+// 🚀 檔案拖入/拖出功能總開關：
+//    true  = 允許從 Explorer 拖 .lnk/.url 進來，也允許把項目拖出去
+//    false = 兩者全部關閉
+// ============================================================
+bool g_bEnableFileDragIO = true;
+
+// 拖出刪檔後的延遲熱重載分頁：幀末（Present 之後）執行，
+// 避免破壞當前幀渲染循環正在遍歷的 vApp
+static int g_pendingReloadIdx = -1;
 
 TabHeadUI gTabUI;
 ResLoader gRes;
@@ -172,6 +186,9 @@ g_SwapChainOccluded = theApp.g_SwapChainOccluded;
     // Show the window
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
+
+    // 🚀 啟用 Explorer 檔案拖放：允許把 .lnk/.url 直接拖進視窗（受總開關控制）
+    ::DragAcceptFiles(hwnd, g_bEnableFileDragIO ? TRUE : FALSE);
 
     // Setup Dear ImGui context
     theApp.InitImGuiContext(main_scale);
@@ -455,9 +472,22 @@ g_SwapChainOccluded = theApp.g_SwapChainOccluded;
         HRESULT hr = g_pSwapChain->Present(1, 0);   // Present with vsync
         //HRESULT hr = g_pSwapChain->Present(0, 0); // Present without vsync
         g_SwapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
+
+        // 🚀 拖出刪檔後的延遲熱重載：此刻當前幀已渲染完畢，可安全重建分頁資料
+        if (g_pendingReloadIdx != -1)
+        {
+            gFUD.ReloadFolder(g_pd3dDevice, &gRes, g_pendingReloadIdx);
+            g_pendingReloadIdx = -1;
+        }
     }
 
     // Cleanup
+
+    // 🚀 退出時持久化各分頁的顯示順序：
+    //    按當前顯示順序把 lnk/url 重命名為 "0000-原名"、"0001-原名"...
+    //    下次啟動時按前綴排序即可恢復本次順序
+    gFUD.PersistOrder();
+
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
@@ -538,6 +568,126 @@ g_SwapChainOccluded = theApp.g_SwapChainOccluded;
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// ============================================================
+// 🚀 拖出確認：刪除該項目對應的 lnk 檔案，並排隊幀末熱重載當前分頁
+// （由 FolderUI 的拖出狀態機在「視窗外鬆開滑鼠」時呼叫）
+// ============================================================
+void AppRemoveDragOutItem(const std::wstring& lnkPath)
+{
+    if (lnkPath.empty()) return;
+
+    ::DeleteFileW(lnkPath.c_str());
+
+    // 🚀 同步清理同名覆蓋圖標（.png / .ico），避免孤兒文件殘留在 lnk 目錄
+    size_t slash = lnkPath.find_last_of(L"\\/");
+    size_t dot = lnkPath.find_last_of(L'.');
+    if (slash != std::wstring::npos && dot != std::wstring::npos && dot > slash)
+    {
+        std::wstring stem = lnkPath.substr(slash + 1, dot - slash - 1);
+        std::wstring dir = lnkPath.substr(0, slash);
+        const wchar_t* iconExts[] = { L".png", L".ico" };
+        for (const wchar_t* e : iconExts)
+        {
+            std::wstring icon = dir + L"\\" + stem + e;
+            DWORD attr = ::GetFileAttributesW(icon.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY))
+            {
+                ::DeleteFileW(icon.c_str());
+            }
+        }
+    }
+
+    // 不能立即 ReloadFolder：當前幀渲染循環仍在遍歷 vApp，clear 會懸空。
+    // 刪檔本身無副作用，排隊到本幀 Present 之後執行重載。
+    g_pendingReloadIdx = gTabUI.m_Idx;
+}
+
+// ==================== 🚀 Explorer 檔案拖放：把 .lnk/.url 拖入視窗，自動複製到當前分頁的 lnk 資料夾 ====================
+
+static void HandleDropFiles(HDROP hDrop)
+{
+    // 總開關關閉時直接忽略
+    if (!g_bEnableFileDragIO)
+    {
+        ::DragFinish(hDrop);
+        return;
+    }
+
+    UINT fileCount = ::DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
+    if (fileCount == 0)
+    {
+        ::DragFinish(hDrop);
+        return;
+    }
+
+    // 當前分頁對應的目標資料夾（分頁 0 = lnk 根目錄，其他 = lnk\<分頁名>）
+    int curIdx = gTabUI.m_Idx;
+    std::wstring subDir;
+    if (curIdx > 0 && curIdx < (int)gFUD.gvFolderName.size())
+    {
+        subDir = gFUD.gvFolderName[curIdx];
+    }
+    std::wstring targetDir = GetLnkDirForFolder(subDir);
+    if (targetDir.empty())
+    {
+        ::DragFinish(hDrop);
+        return;
+    }
+    ::CreateDirectoryW(targetDir.c_str(), nullptr); // 保證目錄存在（已存在時無副作用）
+
+    // 🚀 拖入的新檔案排在最後：前綴序號 = 目錄現有 .lnk/.url 數量
+    int nextPrefix = CountLnkUrlFilesInDir(targetDir);
+
+    bool copiedAny = false;
+    for (UINT i = 0; i < fileCount; ++i)
+    {
+        UINT len = ::DragQueryFileW(hDrop, i, nullptr, 0);
+        if (len == 0) continue;
+        std::wstring srcPath(len + 1, L'\0');
+        if (::DragQueryFileW(hDrop, i, &srcPath[0], len + 1) == 0) continue;
+        srcPath.resize(len);
+
+        // 只接受 .lnk / .url / .ico / .png 類型
+        if (srcPath.size() < 4) continue;
+        const wchar_t* ext = srcPath.c_str() + srcPath.size() - 4;
+
+        if (_wcsicmp(ext, L".lnk") == 0 || _wcsicmp(ext, L".url") == 0)
+        {
+            // 目標完整路徑 = 目錄 + 排序前綴 + 原檔名
+            // 🚀 自動加上 "NNNN-" 前綴（序號接在現有檔案之後）→ 枚舉時排在最後
+            size_t lastSlash = srcPath.find_last_of(L"\\/");
+            std::wstring fileName = (lastSlash == std::wstring::npos) ? srcPath : srcPath.substr(lastSlash + 1);
+
+            WCHAR prefix[8];
+            swprintf_s(prefix, L"%04d-", nextPrefix);
+            std::wstring dstPath = targetDir + L"\\" + prefix + fileName;
+
+            // 複製（目標已存在同名檔案則跳過，避免重複拖入產生副本）
+            if (::CopyFileW(srcPath.c_str(), dstPath.c_str(), FALSE))
+            {
+                copiedAny = true;
+                ++nextPrefix; // 只有成功加入才消耗一個序號
+            }
+        }
+        else if (_wcsicmp(ext, L".ico") == 0 || _wcsicmp(ext, L".png") == 0)
+        {
+            // 🚀 圖標覆蓋：拖到某個項目的圖標按鈕上 → 拷貝到該項目同目錄並改為同名圖標
+            POINT pt;
+            if (::DragQueryPoint(hDrop, &pt) && gFU.ApplyIconToItem(pt, srcPath))
+            {
+                copiedAny = true; // 觸發當前分頁熱重載，立即顯示新圖標
+            }
+        }
+    }
+    ::DragFinish(hDrop);
+
+    // 有新檔案加入時熱重載當前分頁，介面即刻顯示
+    if (copiedAny)
+    {
+        gFUD.ReloadFolder(g_pd3dDevice, &gRes, curIdx);
+    }
+}
 
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -630,6 +780,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
         g_ResizeWidth = (UINT)LOWORD(lParam); // Queue resize
         g_ResizeHeight = (UINT)HIWORD(lParam);
+        return 0;
+    case WM_DROPFILES:
+        HandleDropFiles((HDROP)wParam);
         return 0;
     case WM_SYSCOMMAND:
         if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
