@@ -253,7 +253,8 @@ void FolderUIData::MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::
         else
         {
             // .lnk：解析實體路徑
-            bool bRet = ResolveLnkTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH);
+            bool bRet = ResolveLnkTarget(path.c_str(), item.exePathBuf, INTERNET_MAX_URL_LENGTH,
+                                         item.exeArgsBuf, 512);
             if (!resolved && bRet)
             {
                 // 標準 exe 的圖標路徑就是它自己

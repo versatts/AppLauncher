@@ -16,6 +16,7 @@ struct ST_APP
 {
     ID3D11ShaderResourceView* iconSrv;
     WCHAR exePathBuf[INTERNET_MAX_URL_LENGTH] = { 0 };
+    WCHAR exeArgsBuf[512] = { 0 };   // ? lnk 中記錄的啟動參數（無參數則為空字串）
     std::string sDisplay;
     std::string sPath;
     std::wstring sLnkPath;   // 拖出用：lnk 資料夾中該捷徑檔案的完整原始路徑

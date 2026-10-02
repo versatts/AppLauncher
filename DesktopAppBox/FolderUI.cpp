@@ -187,7 +187,21 @@ namespace
     {
         if (ImGui::ImageButton(btnId, (ImTextureID)app.iconSrv, iconSize))
         {
-            ShellExecuteW(hwnd, L"open", app.exePathBuf, nullptr, nullptr, SW_SHOW);
+            // 🚀 工作目錄設為目標程式所在目錄：否則目標 exe 會繼承啟動器的
+            //    工作目錄，把設定檔/資料夾/日誌等生成到啟動器目錄裡。
+            //    URL / shell:::{GUID} 等非檔案路徑無目錄概念，維持原行為。
+            // 🚀 lnk 中記錄的啟動參數原樣透傳（lpParameters）。
+            const wchar_t* pArgs = (app.exeArgsBuf[0] != L'\0') ? app.exeArgsBuf : nullptr;
+            const wchar_t* pSlash = wcsrchr(app.exePathBuf, L'\\');
+            if (pSlash)
+            {
+                std::wstring workDir(app.exePathBuf, pSlash - app.exePathBuf);
+                ShellExecuteW(hwnd, L"open", app.exePathBuf, pArgs, workDir.c_str(), SW_SHOW);
+            }
+            else
+            {
+                ShellExecuteW(hwnd, L"open", app.exePathBuf, pArgs, nullptr, SW_SHOW);
+            }
         }
 
         // 1. 拖曳來源 (Source)

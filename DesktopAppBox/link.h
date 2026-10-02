@@ -29,7 +29,9 @@ bool ParseOrderPrefix(const std::wstring& fullPath, int& outNum);
 // 統計目錄內 .lnk/.url 檔案數量（拖入新檔時分配下一個前綴序號用）
 int CountLnkUrlFilesInDir(const std::wstring& dir);
 
-bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize);
+// 解析 lnk：輸出目標路徑；outArguments（可選）輸出捷徑中的啟動參數
+bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize,
+                      WCHAR* outArguments = nullptr, int outArgsBufSize = 0);
 
 bool ResolveUrlTarget(LPCWSTR urlFullPath, WCHAR* outExePath, int outPathBufSize, WCHAR* outIconPath, int outIconBufSize);
 

@@ -284,13 +284,18 @@ std::vector<std::wstring> EnumLnkFilesInAppDir( const std::wstring& subDirName, 
 
     return fileResult;
 }
-bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize)
+bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize,
+                      WCHAR* outArguments, int outArgsBufSize)
 {
     // 💥 嚴格防禦：防止傳入空指標或過小的緩衝區
     if (!lnkFullPath || !outExePath || outPathBufSize < MAX_PATH) return false;
 
     // 初始化緩衝區
     outExePath[0] = L'\0';
+    if (outArguments && outArgsBufSize > 0)
+    {
+        outArguments[0] = L'\0';
+    }
 
     Microsoft::WRL::ComPtr<IShellLinkW> pShellLink;
     Microsoft::WRL::ComPtr<IPersistFile> pPersistFile;
@@ -311,6 +316,12 @@ bool ResolveLnkTarget(LPCWSTR lnkFullPath, WCHAR* outExePath, int outPathBufSize
     // 1. 優先嘗試獲取標準實體路徑（使用原本的 SLGP_RAWPATH）
     WIN32_FIND_DATAW wfd = { 0 };
     hr = pShellLink->GetPath(outExePath, outPathBufSize, &wfd, SLGP_RAWPATH);
+
+    // 🚀 取出捷徑中記錄的啟動參數（如 "--fullscreen config.ini"），啟動時需原樣透傳
+    if (outArguments && outArgsBufSize > 0)
+    {
+        pShellLink->GetArguments(outArguments, outArgsBufSize);
+    }
 
     // 2. 🎯 核心修正：如果實體路徑失敗或為空，代表是「此電腦」、「控制台」等虛擬物件
     if (FAILED(hr) || outExePath[0] == L'\0')
