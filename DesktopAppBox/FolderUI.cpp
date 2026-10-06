@@ -1,5 +1,6 @@
 ﻿#include "FolderUI.h"
 #include "FolderUIData.h"
+#include "link.h"    // StripOrderPrefix（改名時保留排序前綴）
 
 // 來自 main.cpp：檔案拖入/拖出功能總開關
 extern bool g_bEnableFileDragIO;
@@ -254,12 +255,75 @@ namespace
     // ============================================================
     // 文字塊：懸停時底色同按鈕懸停色；長文本懸停時跑馬燈滾動
     // ============================================================
-    void DrawTextBlock(const std::string& displayName, size_t itemIdx, const GridLayout& g)
+    // ============================================================
+    // 🚀 雙擊文字塊改名：把新名稱寫回磁碟（自動保留 "NNNN-" 排序前綴）
+    //    同名覆蓋圖標（.png/.ico）跟著一起改名，並同步更新記憶體
+    // ============================================================
+    void ApplyItemRename(ST_APP& app, const char* newNameUtf8)
+    {
+        if (!newNameUtf8 || newNameUtf8[0] == '\0') return; // 空：視為取消（含 ESC 清空）
+        if (app.sLnkPath.empty()) return;
+
+        // UTF-8 → 寬字元
+        int wlen = MultiByteToWideChar(CP_UTF8, 0, newNameUtf8, -1, NULL, 0);
+        if (wlen <= 1) return;
+        std::wstring newName((size_t)wlen - 1, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, newNameUtf8, -1, &newName[0], wlen);
+
+        // 解析舊路徑：dir / 舊主檔名（含前綴）/ 副檔名
+        size_t slash = app.sLnkPath.find_last_of(L"\\/");
+        if (slash == std::wstring::npos) return;
+        std::wstring dir = app.sLnkPath.substr(0, slash);
+        std::wstring fileName = app.sLnkPath.substr(slash + 1);
+        size_t dot = fileName.find_last_of(L'.');
+        if (dot == std::wstring::npos || dot == 0) return;
+        std::wstring oldStem = fileName.substr(0, dot); // 如 "0003-微信"
+        std::wstring ext = fileName.substr(dot);        // 如 ".lnk" / ".url"
+
+        // 新主檔名 = 舊排序前綴 + 新名稱（前綴保持原順序；無前綴則不加）
+        std::wstring stripped = StripOrderPrefix(oldStem);
+        std::wstring newStem = (stripped == oldStem)
+            ? newName
+            : (oldStem.substr(0, oldStem.size() - stripped.size()) + newName);
+
+        std::wstring newPath = dir + L"\\" + newStem + ext;
+        if (_wcsicmp(newPath.c_str(), app.sLnkPath.c_str()) == 0) return; // 沒變
+
+        // 目標已存在（與其他項目撞名）→ 放棄，避免覆蓋
+        if (::GetFileAttributesW(newPath.c_str()) != INVALID_FILE_ATTRIBUTES) return;
+
+        if (!::MoveFileExW(app.sLnkPath.c_str(), newPath.c_str(), 0)) return;
+
+        // 同名覆蓋圖標跟著改名（存在才改），否則改名後圖標會失聯
+        const wchar_t* iconExts[] = { L".png", L".ico" };
+        for (const wchar_t* e : iconExts)
+        {
+            std::wstring oldIcon = dir + L"\\" + oldStem + e;
+            std::wstring newIcon = dir + L"\\" + newStem + e;
+            DWORD attr = ::GetFileAttributesW(oldIcon.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY))
+            {
+                ::MoveFileExW(oldIcon.c_str(), newIcon.c_str(), 0);
+            }
+        }
+
+        // 同步記憶體（不重載：圖標 SRV 不受影響，命中矩形每幀重建）
+        app.sLnkPath = newPath;
+        app.sDisplay = newNameUtf8;
+    }
+
+    void DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g)
     {
         // 懸停滾動狀態（同一時間只有一個項被懸停，單份狀態即可）
         // s_hoverIdx: 當前懸停的項目索引；s_hoverStartTime: 該項目開始懸停的時刻
         static int s_hoverIdx = -1;
         static double s_hoverStartTime = 0.0;
+
+        // 🚀 雙擊改名：編輯狀態（同一時間只有一個項在編輯，單份狀態即可）
+        static bool s_editing = false;
+        static int  s_editIdx = -1;
+        static char s_editBuf[128];
+        static int  s_editFrames = 0;   // 進入編輯後的幀數（跳過首幀的失焦判定）
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -298,20 +362,71 @@ namespace
         float textY = textBlockMin.y + (g.textBlockHeight - ImGui::GetTextLineHeight()) * 0.5f;
         ImU32 textColor = ImGui::GetColorU32(ImGuiCol_Text);
 
-        ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
+        // ===== 🚀 雙擊文字塊進入編輯 =====
+        if (!s_editing && ImGui::IsMouseHoveringRect(textBlockMin, textBlockMax) &&
+            ImGui::IsMouseDoubleClicked(0))
+        {
+            s_editing = true;
+            s_editIdx = (int)itemIdx;
+            strncpy_s(s_editBuf, app.sDisplay.c_str(), _TRUNCATE); // 編輯起點 = 目前顯示名（無前綴）
+            s_editFrames = 0;
+        }
+
+        // ===== 🚀 編輯中：在文字塊位置渲染輸入框，其餘項目照常 =====
+        if (s_editing && s_editIdx == (int)itemIdx)
+        {
+            bool apply = false;
+
+            ImGui::SetCursorScreenPos(textBlockMin);
+            ImGui::SetNextItemWidth(g.buttonWidth);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
+            if (s_editFrames == 0)
+            {
+                ImGui::SetKeyboardFocusHere(0); // 首幀搶焦點
+            }
+            ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
+            if (ImGui::InputText("##rename_item", s_editBuf, sizeof(s_editBuf), flags))
+            {
+                apply = true; // 回車
+            }
+            ImGui::PopStyleColor(1);
+            ImGui::PopStyleVar(1);
+
+            // 失焦（點擊其他地方）→ 應用。跳過首幀：焦點尚未就緒會誤判失焦。
+            // ESC 會清空緩衝區，空名稱在 ApplyItemRename 中視為取消。
+            if (!apply && s_editFrames > 0 && ImGui::IsItemDeactivated())
+            {
+                apply = true;
+            }
+
+            if (apply)
+            {
+                s_editing = false;
+                s_editIdx = -1;
+                ApplyItemRename(app, s_editBuf);
+            }
+            else
+            {
+                s_editFrames++;
+            }
+            return; // 編輯中：不繪製普通文字（底色已繪製）
+        }
+
+        ImVec2 textSize = ImGui::CalcTextSize(app.sDisplay.c_str());
 
         if (textSize.x <= maxTextWidth)
         {
             // 短文本：直接水平居中完整顯示
             float textRenderX = textBlockMin.x + (g.buttonWidth - textSize.x) * 0.5f;
-            drawList->AddText(ImVec2(textRenderX, textY), textColor, displayName.c_str());
+            drawList->AddText(ImVec2(textRenderX, textY), textColor, app.sDisplay.c_str());
             return;
         }
 
         if (!isHoveredNow)
         {
             // 長文本 + 未懸停：截斷加 "..."
-            std::string finalName = TruncateUtf8WithEllipsis(displayName, maxTextWidth);
+            std::string finalName = TruncateUtf8WithEllipsis(app.sDisplay, maxTextWidth);
             drawList->AddText(ImVec2(textBlockMin.x + textPaddingX, textY), textColor, finalName.c_str());
             return;
         }
@@ -344,7 +459,7 @@ namespace
 
         // 裁剪在文字塊內繪製（offset 增大 = 文字向左移動 = 逐漸顯示尾部）
         drawList->PushClipRect(textBlockMin, textBlockMax, true);
-        drawList->AddText(ImVec2(textBlockMin.x + textPaddingX - scrollOffset, textY), textColor, displayName.c_str());
+        drawList->AddText(ImVec2(textBlockMin.x + textPaddingX - scrollOffset, textY), textColor, app.sDisplay.c_str());
         drawList->PopClipRect();
     }
 
@@ -488,7 +603,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 
             if (g.bShowText)
             {
-                DrawTextBlock(a.sDisplay, i, g);
+                DrawTextBlock(a, i, g);
             }
 
             DrawItemTooltip(a, g);
