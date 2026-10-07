@@ -16,6 +16,343 @@ ResLoader::~ResLoader()
     }
 }
 
+// ============================================================
+// ============================================================
+// 🚀 高質量 area-average（box）縮放 32bpp BGRA 像素。
+//    預乘 alpha 後加權平均，避免邊緣縮放產生暗暈/雜點。
+//    等價於理想的 mip 推導：任意比例縮小都無走樣鋸齒。
+// ============================================================
+static bool ResampleRGBA32(const DWORD* src, int sw, int sh, DWORD* dst, int dw, int dh)
+{
+    if (!src || !dst || sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return false;
+    if (sw == dw && sh == dh) { memcpy(dst, src, (size_t)sw * sh * 4); return true; }
+
+    for (int dy = 0; dy < dh; ++dy)
+    {
+        double sy0 = (double)dy * sh / dh;
+        double sy1 = (double)(dy + 1) * sh / dh;
+        int iy0 = (int)sy0;
+        int iy1 = (sy1 > (double)(int)sy1) ? ((int)sy1 + 1) : (int)sy1;
+        if (iy1 > sh) iy1 = sh;
+
+        for (int dx = 0; dx < dw; ++dx)
+        {
+            double sx0 = (double)dx * sw / dw;
+            double sx1 = (double)(dx + 1) * sw / dw;
+            int ix0 = (int)sx0;
+            int ix1 = (sx1 > (double)(int)sx1) ? ((int)sx1 + 1) : (int)sx1;
+            if (ix1 > sw) ix1 = sw;
+
+            double r = 0, g = 0, b = 0, a = 0, sumW = 0;
+            for (int iy = iy0; iy < iy1; ++iy)
+            {
+                double wy = (sy1 < (double)(iy + 1) ? sy1 : (double)(iy + 1))
+                          - (sy0 > (double)iy ? sy0 : (double)iy);
+                if (wy <= 0) continue;
+                const DWORD* row = src + (size_t)iy * sw;
+                for (int ix = ix0; ix < ix1; ++ix)
+                {
+                    double wx = (sx1 < (double)(ix + 1) ? sx1 : (double)(ix + 1))
+                              - (sx0 > (double)ix ? sx0 : (double)ix);
+                    if (wx <= 0) continue;
+                    double w = wx * wy;
+                    DWORD p = row[ix];
+                    double pa = (double)((p >> 24) & 0xFF);
+                    r += (double)((p >> 16) & 0xFF) * pa * w; // 預乘 alpha
+                    g += (double)((p >> 8) & 0xFF) * pa * w;
+                    b += (double)(p & 0xFF) * pa * w;
+                    a += pa * w;
+                    sumW += w;
+                }
+            }
+
+            DWORD& out = dst[(size_t)dy * dw + dx];
+            if (a <= 0.0 || sumW <= 0.0) { out = 0; continue; }
+            double da = a / sumW;                 // 平均 alpha
+            DWORD dr = (DWORD)(r / a + 0.5);      // 預乘平均後除回 → 直通色
+            DWORD dg = (DWORD)(g / a + 0.5);
+            DWORD db = (DWORD)(b / a + 0.5);
+            if (dr > 255) dr = 255; if (dg > 255) dg = 255; if (db > 255) db = 255;
+            if (da > 255.0) da = 255.0;
+            out = ((DWORD)da << 24) | (dr << 16) | (dg << 8) | db;
+        }
+    }
+    return true;
+}
+
+// ============================================================
+// 🚀 解析 .ico 目錄，挑出最適合的「實際存在」尺寸。
+//    策略：優先取「≥desired 的最小尺寸」（下採樣品質好於上採樣），
+//    若全部小於 desired 則取最大尺寸。返回 0 表示解析失敗。
+//    目的：PrivateExtractIconsW 若請求的尺寸不存在，會把最接近的
+//    小圖拉伸到請求尺寸（鋸齒來源）；按實際尺寸提取則零縮放。
+// ============================================================
+static UINT PickBestIcoSize(const wchar_t* icoPath, UINT desired)
+{
+    HANDLE hFile = ::CreateFileW(icoPath, GENERIC_READ, FILE_SHARE_READ, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return 0;
+
+    UINT result = 0;
+    do
+    {
+        // ICONDIR: WORD reserved; WORD type(=1); WORD count;
+        struct { WORD reserved, type, count; } hdr = {};
+        DWORD bytesRead = 0;
+        if (!::ReadFile(hFile, &hdr, sizeof(hdr), &bytesRead, nullptr) ||
+            bytesRead != sizeof(hdr) || hdr.type != 1 || hdr.count == 0)
+        {
+            break;
+        }
+
+        // ICONDIRENTRY: BYTE bWidth, bHeight(0 代表 256), ...（後 12 位元組尺寸無關）
+        struct Entry { BYTE w, h, c, r; WORD planes, bpp; DWORD bytes, offset; };
+        UINT bestUp = 0;   // ≥ desired 的最小尺寸（下採樣，品質優先）
+        UINT bestDown = 0; // < desired 的最大尺寸（無大圖時的退路）
+        for (WORD i = 0; i < hdr.count; i++)
+        {
+            Entry e = {};
+            if (!::ReadFile(hFile, &e, sizeof(e), &bytesRead, nullptr) || bytesRead != sizeof(e))
+            {
+                break;
+            }
+            UINT size = (e.w == 0) ? 256u : e.w; // 寬高一致，看寬即可
+            if (size >= desired)
+            {
+                if (bestUp == 0 || size < bestUp) bestUp = size;
+            }
+            else
+            {
+                if (size > bestDown) bestDown = size;
+            }
+        }
+        result = (bestUp != 0) ? bestUp : bestDown;
+    } while (false);
+
+    ::CloseHandle(hFile);
+    return result;
+}
+
+// ============================================================
+// 🚀 像素 → SRV：縮到目標尺寸（area-average）+ 建紋理 + mipmap。
+//    供直讀 ICO 路徑使用，與 IconToD3D11SRV_Simple 的建資源邏輯一致。
+// ============================================================
+static ID3D11ShaderResourceView* CreateSRVFromPixels(ID3D11Device* pDevice,
+    std::vector<DWORD>& pixels, int& outW, int& outH, int targetSize)
+{
+    if (targetSize > 0 && outW > targetSize && outH > targetSize)
+    {
+        int nw = targetSize, nh = targetSize;
+        if (outW >= outH) nh = (outH * targetSize) / outW;
+        else              nw = (outW * targetSize) / outH;
+        if (nw < 1) nw = 1;
+        if (nh < 1) nh = 1;
+        std::vector<DWORD> scaled((size_t)nw * nh);
+        if (ResampleRGBA32(pixels.data(), outW, outH, scaled.data(), nw, nh))
+        {
+            pixels = std::move(scaled);
+            outW = nw;
+            outH = nh;
+        }
+    }
+
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width = outW;
+    desc.Height = outH;
+    desc.MipLevels = 0;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+
+    ID3D11ShaderResourceView* pSRV = nullptr;
+    ID3D11Texture2D* pTex = nullptr;
+    if (SUCCEEDED(pDevice->CreateTexture2D(&desc, nullptr, &pTex)))
+    {
+        ID3D11DeviceContext* pContext = nullptr;
+        pDevice->GetImmediateContext(&pContext);
+        if (pContext)
+        {
+            pContext->UpdateSubresource(pTex, 0, nullptr, pixels.data(), outW * 4, 0);
+            pDevice->CreateShaderResourceView(pTex, nullptr, &pSRV);
+            if (pSRV)
+            {
+                pContext->GenerateMips(pSRV);
+            }
+            pContext->Release();
+        }
+        pTex->Release();
+    }
+    return pSRV;
+}
+
+// ============================================================
+// 🚀 直讀 ICO 檔案提取像素：繞開 GDI(HICON) 提取鏈。
+//    GDI 鏈的問題：ICO 內低位深（4/8bpp 調色板）條目經系統轉換後
+//    色階損失、1bit 透明 mask 硬邊全部保留——即「顏色 bit 數不夠」
+//    的觀感來源。直讀則優先挑 PNG / 32bpp 高位深條目：
+//      - PNG 條目：WIC 解碼，完整 32bpp RGBA 漸變；
+//      - 32bpp DIB：手動展開（bottom-up 翻轉 + alpha 全 0 時套 AND mask）。
+//    失敗返回 false，由調用方退回 GDI 舊路徑。
+// ============================================================
+static bool LoadIcoPixelsDirect(const wchar_t* icoPath, UINT desiredSize,
+    std::vector<DWORD>& outPixels, UINT& outW, UINT& outH)
+{
+    HANDLE hFile = ::CreateFileW(icoPath, GENERIC_READ, FILE_SHARE_READ, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return false;
+
+    bool ok = false;
+    do
+    {
+        struct { WORD reserved, type, count; } hdr = {};
+        DWORD rd = 0;
+        if (!::ReadFile(hFile, &hdr, sizeof(hdr), &rd, nullptr) || rd != sizeof(hdr) ||
+            hdr.type != 1 || hdr.count == 0 || hdr.count > 64)
+        {
+            break;
+        }
+
+        // 收集全部條目信息（尺寸/位深/偏移）
+        struct Entry { BYTE w, h, c, r; WORD planes, bpp; DWORD bytes, offset; };
+        struct Info { UINT size, bpp; DWORD offset, bytes; };
+        std::vector<Info> infos;
+        for (WORD i = 0; i < hdr.count; ++i)
+        {
+            Entry e = {};
+            if (!::ReadFile(hFile, &e, sizeof(e), &rd, nullptr) || rd != sizeof(e)) break;
+            UINT size = (e.w == 0) ? 256u : e.w;
+            infos.push_back({ size, e.bpp, e.offset, e.bytes });
+        }
+        if (infos.empty()) break;
+
+        // 選條目：pass0 = 高位深(bpp==0 的 PNG 條目或 >=32)且尺寸足夠；
+        //         pass1 = 高位深（尺寸不足也優先保位深）；
+        //         pass2 = 任意（最大尺寸）。同 pass 內：≥desired 取最小，否則取最大。
+        int best = -1;
+        for (int pass = 0; pass < 3 && best < 0; ++pass)
+        {
+            UINT bestSize = 0;
+            for (size_t i = 0; i < infos.size(); ++i)
+            {
+                const Info& f = infos[i];
+                bool cond = (pass == 0) ? (f.bpp == 0 || f.bpp >= 32) && f.size >= desiredSize
+                          : (pass == 1) ? (f.bpp == 0 || f.bpp >= 32)
+                          : true;
+                if (!cond) continue;
+
+                if (best < 0) { best = (int)i; bestSize = f.size; continue; }
+                bool better;
+                if (f.size >= desiredSize) better = (bestSize < desiredSize) || (f.size < bestSize);
+                else                       better = (bestSize < desiredSize) && (f.size > bestSize);
+                if (better) { best = (int)i; bestSize = f.size; }
+            }
+        }
+        if (best < 0) break;
+
+        // 讀取選中條目的原始數據
+        const Info& info = infos[best];
+        if (info.bytes < 8) break;
+        if (::SetFilePointer(hFile, info.offset, nullptr, FILE_BEGIN) == INVALID_SET_FILE_POINTER) break;
+        std::vector<BYTE> data(info.bytes);
+        if (!::ReadFile(hFile, data.data(), (DWORD)data.size(), &rd, nullptr) || rd != data.size()) break;
+
+        if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47)
+        {
+            // ===== PNG 條目：WIC 解碼為 32bpp BGRA（完整 alpha 漸變） =====
+            IWICImagingFactory* pFactory = nullptr;
+            if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
+                IID_PPV_ARGS(&pFactory)))) break;
+            IWICStream* pStream = nullptr;
+            IWICBitmapDecoder* pDecoder = nullptr;
+            IWICBitmapFrameDecode* pFrame = nullptr;
+            IWICFormatConverter* pConv = nullptr;
+            pFactory->CreateStream(&pStream);
+            if (pStream)
+            {
+                pStream->InitializeFromMemory(data.data(), (DWORD)data.size());
+                pFactory->CreateDecoderFromStream(pStream, NULL, WICDecodeMetadataCacheOnDemand, &pDecoder);
+            }
+            if (pDecoder && SUCCEEDED(pDecoder->GetFrame(0, &pFrame)) && pFrame)
+            {
+                UINT w = 0, h = 0;
+                pFrame->GetSize(&w, &h);
+                if (w > 0 && h > 0)
+                {
+                    pFactory->CreateFormatConverter(&pConv);
+                    if (pConv && SUCCEEDED(pConv->Initialize(pFrame, GUID_WICPixelFormat32bppBGRA,
+                        WICBitmapDitherTypeNone, NULL, 0.0, WICBitmapPaletteTypeCustom)))
+                    {
+                        outPixels.resize((size_t)w * h);
+                        if (SUCCEEDED(pConv->CopyPixels(NULL, w * 4,
+                            (UINT)(outPixels.size() * 4), (BYTE*)outPixels.data())))
+                        {
+                            outW = w; outH = h; ok = true;
+                        }
+                    }
+                }
+                pFrame->Release();
+            }
+            if (pConv) pConv->Release();
+            if (pDecoder) pDecoder->Release();
+            if (pStream) pStream->Release();
+            pFactory->Release();
+        }
+        else
+        {
+            // ===== BMP(DIB) 條目：只支援 32bpp BI_RGB（低位深條目已被選擇階段過濾） =====
+            if (data.size() < 40) break;
+            BITMAPINFOHEADER* bih = (BITMAPINFOHEADER*)data.data();
+            if (bih->biSize < 40 || bih->biSize > 124 || bih->biCompression != BI_RGB) break;
+            int w = bih->biWidth;
+            int hIcon = bih->biHeight / 2; // ICO 的 DIB 高度是圖標 2 倍（彩色 + AND mask）
+            if (w <= 0 || hIcon <= 0) break;
+            size_t pxOff = bih->biSize; // 調色板在 32bpp 下不存在
+            if (data.size() < pxOff + (size_t)w * hIcon * 4) break;
+
+            const DWORD* src = (const DWORD*)(data.data() + pxOff);
+            outPixels.resize((size_t)w * hIcon);
+            for (int y = 0; y < hIcon; ++y) // DIB bottom-up → 翻轉為 top-down
+            {
+                memcpy(&outPixels[(size_t)(hIcon - 1 - y) * w],
+                    src + (size_t)y * w, (size_t)w * 4);
+            }
+
+            // 很多 32bpp ICO 的 alpha 通道全 0 → 用 AND mask 生成透明度
+            bool hasAlpha = false;
+            for (size_t i = 0; i < outPixels.size(); ++i)
+            {
+                if (((outPixels[i] >> 24) & 0xFF) != 0) { hasAlpha = true; break; }
+            }
+            if (!hasAlpha)
+            {
+                const BYTE* mask = data.data() + pxOff + (size_t)w * hIcon * 4;
+                size_t maskPitch = (((size_t)w + 31) / 32) * 4; // DWORD 對齊
+                if (data.size() >= pxOff + (size_t)w * hIcon * 4 + maskPitch * (size_t)hIcon)
+                {
+                    for (int y = 0; y < hIcon; ++y)
+                    {
+                        for (int x = 0; x < w; ++x)
+                        {
+                            size_t my = (size_t)(hIcon - 1 - y); // mask 也是 bottom-up
+                            BYTE bit = mask[my * maskPitch + (size_t)x / 8] & (0x80 >> (x % 8));
+                            if (!bit) outPixels[(size_t)y * w + x] |= 0xFF000000; // 0 = 不透明
+                        }
+                    }
+                }
+            }
+            outW = (UINT)w;
+            outH = (UINT)hIcon;
+            ok = true;
+        }
+    } while (false);
+
+    ::CloseHandle(hFile);
+    return ok;
+}
+
 ID3D11ShaderResourceView* ResLoader::LoadHighestResIconSRV(ID3D11Device* pDevice, const wchar_t* exePath, UINT& outW, UINT& outH)
 {
     if (!exePath || *exePath == L'\0') return nullptr;
@@ -77,9 +414,29 @@ ID3D11ShaderResourceView* ResLoader::LoadHighestResIconSRV(ID3D11Device* pDevice
     size_t pathLen = wcslen(exePath);
     if (pathLen > 4 && _wcsicmp(exePath + pathLen - 4, L".ico") == 0)
     {
+        // 🚀 直讀 ICO（首選）：優先挑 PNG / 32bpp 高位深條目，繞開 GDI(HICON)
+        //    提取鏈——低位深調色板條目經 GDI 轉換會產生色階與硬邊透明
+        //    （「顏色 bit 數不夠」的觀感來源）。直讀 + area-average 縮到 64。
+        std::vector<DWORD> icoPx;
+        UINT icoW = 0, icoH = 0;
+        if (LoadIcoPixelsDirect(exePath, 64, icoPx, icoW, icoH))
+        {
+            int w = (int)icoW, h = (int)icoH;
+            ID3D11ShaderResourceView* pSRV = CreateSRVFromPixels(pDevice, icoPx, w, h, 64);
+            outW = (UINT)w;
+            outH = (UINT)h;
+            return pSRV;
+        }
+
+        // 退回 GDI 舊路徑（直讀失敗：非法 ICO / 系統特殊格式）
+        // 解析 ICO 目錄，挑最適合提取的「實際存在」尺寸（優先 ≥64 的最小，
+        //    下採樣品質好於上採樣），提取後 CPU 端高質量縮到 64（見 targetSize 參數）。
+        UINT bestSize = PickBestIcoSize(exePath, 64);
+        if (bestSize == 0) bestSize = 64; // 目錄解析失敗：退回直接請求 64
+
         HICON hIcon = nullptr;
         UINT iconId = 0;
-        UINT nExtracted = PrivateExtractIconsW(exePath, 0, 256, 256, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
+        UINT nExtracted = PrivateExtractIconsW(exePath, 0, bestSize, bestSize, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
         if (nExtracted == 0 || !hIcon)
         {
             nExtracted = PrivateExtractIconsW(exePath, 0, 0, 0, &hIcon, &iconId, 1, LR_DEFAULTCOLOR);
@@ -88,7 +445,8 @@ ID3D11ShaderResourceView* ResLoader::LoadHighestResIconSRV(ID3D11Device* pDevice
         if (hIcon)
         {
             int w = 0, h = 0;
-            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, hIcon, w, h);
+            // targetSize=64：提取像素按長邊等比縮到 64，顯示 1:1 無走樣
+            ID3D11ShaderResourceView* pSRV = IconToD3D11SRV_Simple(pDevice, hIcon, w, h, 64);
             DestroyIcon(hIcon);
             outW = (UINT)w;
             outH = (UINT)h;
@@ -194,6 +552,26 @@ ID3D11ShaderResourceView* ResLoader::CreateSRVFromPngBlob(ID3D11Device* pDevice,
     std::vector<BYTE> rgbaData(outW * outH * 4);
     pConverter->CopyPixels(NULL, outW * 4, static_cast<UINT>(rgbaData.size()), rgbaData.data());
 
+    // 🚀 高質量縮到顯示尺寸 64：非 2 冪次尺寸的 PNG 不會生成 Mipmap，
+    //    大圖直接靠 GPU 縮小顯示會走樣鋸齒 → CPU 端 area-average 縮放。
+    //    小圖（≤64）不放大，保持原樣。
+    if (outW > 64 || outH > 64)
+    {
+        int nw = 64, nh = 64;
+        if (outW >= outH) nh = (outH * 64) / outW;
+        else              nw = (outW * 64) / outH;
+        if (nw < 1) nw = 1;
+        if (nh < 1) nh = 1;
+        std::vector<BYTE> scaled((size_t)nw * nh * 4);
+        if (ResampleRGBA32(reinterpret_cast<const DWORD*>(rgbaData.data()), (int)outW, (int)outH,
+            reinterpret_cast<DWORD*>(scaled.data()), nw, nh))
+        {
+            rgbaData = std::move(scaled);
+            outW = (UINT)nw;
+            outH = (UINT)nh;
+        }
+    }
+
     ID3D11ShaderResourceView* pSRV = nullptr;
 
     // 💡 核心防禦：檢查當前顯示卡對此格式的硬體 Mip 支援
@@ -268,7 +646,7 @@ ID3D11ShaderResourceView* ResLoader::CreateSRVFromPngBlob(ID3D11Device* pDevice,
 }
 
 
-ID3D11ShaderResourceView* ResLoader::IconToD3D11SRV_Simple(ID3D11Device* pDevice, HICON hIcon, int& outW, int& outH)
+ID3D11ShaderResourceView* ResLoader::IconToD3D11SRV_Simple(ID3D11Device* pDevice, HICON hIcon, int& outW, int& outH, int targetSize)
 {
     ICONINFO iconInfo;
     if (!GetIconInfo(hIcon, &iconInfo)) return nullptr;
@@ -364,6 +742,25 @@ ID3D11ShaderResourceView* ResLoader::IconToD3D11SRV_Simple(ID3D11Device* pDevice
         }
     }
     // ========================================================================
+
+    // 🚀 高質量縮到目標尺寸（如 64）：顯示端 1:1 呈現，不依賴 GPU 縮放/走樣。
+    //    大圖（256/128）用 area-average 下採樣，邊緣平滑無鋸齒；
+    //    小圖（32/48）不放大（targetSize 只下採樣，避免放大發糊）。
+    if (targetSize > 0 && outW > targetSize && outH > targetSize)
+    {
+        int nw = targetSize, nh = targetSize;
+        if (outW >= outH) nh = (outH * targetSize) / outW;
+        else              nw = (outW * targetSize) / outH;
+        if (nw < 1) nw = 1;
+        if (nh < 1) nh = 1;
+        std::vector<DWORD> scaled((size_t)nw * nh);
+        if (ResampleRGBA32(pixels.data(), outW, outH, scaled.data(), nw, nh))
+        {
+            pixels = std::move(scaled);
+            outW = nw;
+            outH = nh;
+        }
+    }
 
     // 建立 D3D11 資源（包含前述的 Mipmaps 支援）
     ID3D11ShaderResourceView* pSRV = nullptr;
