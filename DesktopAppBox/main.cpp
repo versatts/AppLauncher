@@ -13,6 +13,10 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <cmath>    // std::floor
+#include <string>
+#include <cstdio>   // std::snprintf, fopen, fgets, fread, fwrite
+#include <climits>  // INT_MIN
 
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
@@ -65,41 +69,134 @@ static int g_pendingReloadIdx = -1;
 TabHeadUI gTabUI;
 ResLoader gRes;
 
-// 確保全域或靜態變數可以被存取
+// 🟢 现在 g_OSWinX/Y/W/H 用来保存 ImGui 主窗口（"-AppBox-"）的位置和大小，
+//    而不是 Win32 Host 窗口。Win32 Host 固定为 20x20，ImGui 窗口与之中心对齐。
+//    ImGui 自己会把 [-AppBox-] 的 Pos/Size 写到 imgui.ini，这里负责读取/写入。
+
 static int g_OSWinX = 100, g_OSWinY = 100, g_OSWinW = 0, g_OSWinH = 0;
-static int g_OSWinH_0 = 0;
+static int g_OSWinH_0 = 0;          // 折叠前的"完整" ImGui 高度，供保存恢复用
 bool isCollapsed = false;
-static HWND g_hwnd = nullptr; // 💡 用來儲存你建立好的 HWND
+static HWND g_hwnd = nullptr;      // Win32 Host 窗口 HWND（20x20，不可改变大小）
 
-// 💡 寫一個專門的初始化註冊函式，在 ImGui::CreateContext() 之後立刻呼叫
-void RegisterWin32IniHandler()
+// Win32 Host 窗口固定尺寸：20x20 像素（用于挂载 ImGui，拖动逻辑由 NCHITTEST 提供）
+static constexpr int HOST_W = 20;
+static constexpr int HOST_H = 20;
+
+// ImGui 默认窗口大小（首次启动 / ini 中没有 Pos/Size 时使用）
+static constexpr int DEFAULT_IMGUI_W = 600;
+static constexpr int DEFAULT_IMGUI_H = 400;
+
+// 💡 手动从 imgui.ini 中解析 [Window][-AppBox-] 节点的 Pos= / Size=
+//    用来在 WinMain 中给 ImGui 第一次 Begin 提供初始位置/大小。
+static void LoadAppBoxRectFromIni(const char* iniPath, bool& found, int& x, int& y, int& w, int& h)
 {
-    ImGuiSettingsHandler ini_handler;
-    ini_handler.TypeName = "Win32_HostWindow";
-    ini_handler.TypeHash = ImHashStr("Win32_HostWindow");
+    found = false;
+    x = y = w = h = 0;
+    if (!iniPath) return;
+    FILE* f = ::fopen(iniPath, "rt");
+    if (!f) return;
 
-    // 💡 關鍵修正：補上 ReadOpenFn，防止 ImGui 呼叫空指標崩潰
-    ini_handler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, const char* name) -> void* {
-        // 只要這區塊的名字是我們支援的（例如 Settings），就回傳一個非空指標代表允許讀取
-        if (strcmp(name, "Settings") == 0) {
-            return (void*)handler;
+    char line[512];
+    bool inAppBox = false;
+    while (::fgets(line, sizeof(line), f))
+    {
+        if (line[0] == '[')
+        {
+            inAppBox = (::strstr(line, "[-AppBox-]") != nullptr);
+            continue;
         }
-        return nullptr;
-        };
+        if (!inAppBox) continue;
 
-    // 讀取每一行資料的回呼
-    ini_handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler*, void* entry, const char* line) {
-        // 這裡的 entry 就是上面 ReadOpenFn 回傳的指標，這裡不需要特別操作它
-        sscanf_s(line, "Pos=%d,%d Size=%d,%d", &g_OSWinX, &g_OSWinY, &g_OSWinW, &g_OSWinH);
-        };
+        int tx = 0, ty = 0, tw = 0, th = 0;
+        if (::strncmp(line, "Pos=", 4) == 0 && ::sscanf(line + 4, "%d,%d", &tx, &ty) == 2)
+        {
+            x = tx;
+            y = ty;
+            found = true;
+        }
+        else if (::strncmp(line, "Size=", 5) == 0 && ::sscanf(line + 5, "%d,%d", &tw, &th) == 2)
+        {
+            w = tw;
+            h = th;
+            found = true;
+        }
+    }
+    ::fclose(f);
+}
 
-    // 寫入 ini 檔時的回呼
-    ini_handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf) {
-        buf->appendf("[%s][%s]\n", handler->TypeName, "Settings");
-        buf->appendf("Pos=%d,%d Size=%d,%d\n\n", g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH);
-        };
+// 写入时也写到 ImGui 默认节点 [Window][-AppBox-] 中（覆盖 Pos= 和 Size=）
+// 这样下一帧 ImGui 自己 SaveIni 时会保留我们的修正值。
+static void WriteAppBoxRectToIni(const char* iniPath, int x, int y, int w, int h)
+{
+    if (!iniPath) return;
+    FILE* f = ::fopen(iniPath, "rt");
+    std::string body;
+    if (f)
+    {
+        // 读全部内容
+        fseek(f, 0, SEEK_END);
+        long sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (sz > 0 && sz < 4 * 1024 * 1024)
+        {
+            body.assign((size_t)sz, '\0');
+            fread(body.data(), 1, (size_t)sz, f);
+        }
+        fclose(f);
+    }
 
-    ImGui::GetCurrentContext()->SettingsHandlers.push_back(ini_handler);
+    // 在字符串中替换 [Window][-AppBox-] 节点下的 Pos= / Size= 行
+    auto replace_or_insert = [&](const std::string& key, int v1, int v2) {
+        char needle[64];
+        std::snprintf(needle, sizeof(needle), "%s=", key.c_str());
+        std::string repl = key + "=" + std::to_string(v1) + "," + std::to_string(v2);
+
+        size_t pos = body.find("[Window][-AppBox-]");
+        if (pos == std::string::npos) {
+            // 节点不存在：在末尾追加一个
+            if (!body.empty() && body.back() != '\n') body.push_back('\n');
+            body += "[Window][-AppBox-]\n";
+            body += repl + "\n\n";
+            return;
+        }
+
+        size_t next = body.find("\n[", pos);
+        size_t end = (next == std::string::npos) ? body.size() : next;
+
+        bool replaced = false;
+        size_t scan = pos;
+        while (scan < end)
+        {
+            size_t eol = body.find('\n', scan);
+            if (eol == std::string::npos || eol > end) eol = end;
+            std::string l = body.substr(scan, eol - scan);
+            if (l.rfind(needle, 0) == 0)
+            {
+                body.replace(scan, eol - scan, repl);
+                replaced = true;
+                break;
+            }
+            scan = eol + 1;
+        }
+
+        if (!replaced)
+        {
+            // 节点存在但没这行：在该节点第一行后插入
+            size_t lineEnd = body.find('\n', pos);
+            if (lineEnd == std::string::npos) lineEnd = body.size();
+            body.insert(lineEnd + 1, repl + "\n");
+        }
+    };
+
+    replace_or_insert("Pos", x, y);
+    replace_or_insert("Size", w, h);
+
+    f = ::fopen(iniPath, "wt");
+    if (f)
+    {
+        fwrite(body.data(), 1, body.size(), f);
+        fclose(f);
+    }
 }
 // Main code
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
@@ -112,9 +209,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
-    RegisterWin32IniHandler();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     ImGui::LoadIniSettingsFromDisk(io.IniFilename);
+
+    // 🟢 启动时：从 imgui.ini 的 [Window][-AppBox-] 节点读取上次保存的
+    //    ImGui 窗口 Pos/Size 到 g_OSWinX/Y/W/H。
+    //    如果该节点不存在（首次启动 / 被清空），found 保持 false，下面会用默认值。
+    {
+        bool iniFound = false;
+        LoadAppBoxRectFromIni(io.IniFilename, iniFound, g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH);
+        if (iniFound)
+        {
+            // 防止异常值：宽/高太小就退回到默认
+            if (g_OSWinW < 100) g_OSWinW = 100;
+            if (g_OSWinH < 50)  g_OSWinH = 50;
+        }
+    }
 
     int cx = ::GetSystemMetrics(SM_CXSCREEN);
     int cy = ::GetSystemMetrics(SM_CYSCREEN);
@@ -130,22 +240,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
      // 💡 核心修復一：移除 WS_EX_TRANSPARENT（滑鼠穿透），這樣按鈕和 Tab 就能正常點擊交互了！
      // 💡 核心修復二：保留 WS_EX_LAYERED 確保視窗跨越系統純色裁剪優化，100% 正常繪製
 
+    // 🟢 ImGui 默认窗口大小（ini 中无记录时使用）
     if (g_OSWinW == 0)
     {
-        g_OSWinX = (cx - g_WinW) / 2;
-        g_OSWinY = (cy - g_WinH) / 2;
-        g_OSWinW = (int)(g_WinW * main_scale);
-        g_OSWinH = (int)(g_WinH * main_scale);
+        g_OSWinW = (int)(DEFAULT_IMGUI_W * main_scale);
+        g_OSWinH = (int)(DEFAULT_IMGUI_H * main_scale);
+        // 默认 ImGui 窗口位置 = 屏幕中心
+        g_OSWinX = (cx - g_OSWinW) / 2;
+        g_OSWinY = (cy - g_OSWinH) / 2;
     }
-    g_OSWinW < 50 ? g_OSWinW = 50 : 0;
-    g_OSWinH < 50 ? g_OSWinH = 50 : 0;
-    g_OSWinH_0 = g_OSWinH;
+    // 最小尺寸保护
+    if (g_OSWinW < 100) g_OSWinW = 100;
+    if (g_OSWinH < 50)  g_OSWinH = 50;
+    g_OSWinH_0 = g_OSWinH;  // 记录"未折叠"高度，用于折叠状态下保存恢复
+
+    // 🟢 Win32 Host 窗口固定为 20x20，位置 = ImGui 窗口中心
+    int hostX = g_OSWinX + (g_OSWinW - HOST_W) / 2;
+    int hostY = g_OSWinY + (g_OSWinH - HOST_H) / 2;
     HWND hwnd = ::CreateWindowExW(
         WS_EX_LAYERED,                      // 擴展樣式：僅保留層級，移除穿透
         wc.lpszClassName,
         L"-AppBox-",                         // 標題字串
         WS_POPUP | WS_CLIPCHILDREN,          // 標準彈出式（保持頂層身份，D3D才能穩定Present）
-        g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH,
+        hostX, hostY, HOST_W, HOST_H,       // 🟢 固定 20x20
         nullptr, nullptr, wc.hInstance, nullptr
     );
     g_hwnd = hwnd;
@@ -254,17 +371,42 @@ g_SwapChainOccluded = theApp.g_SwapChainOccluded;
         ImGui::NewFrame();
 
         // 0. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
-        {
-            static bool show_close_confirmation = false;
+                {
+                    static bool show_close_confirmation = false;
 
-            ImGuiViewport* main_vp = ImGui::GetMainViewport();
+                    // 🟢 每帧把 Win32 Host(20x20) 同步到 ImGui 主窗口中心，保持"中心对齐"。
+                    //    启动时已经给 ImGui 设置过一次初始 Pos/Size（来自 ini / 默认值）；
+                    //    此后 ImGui 自己管理位置（拖动、保存），我们不再 SetNextWindowPos，
+                    //    这样"移动逻辑不变"——用户拖动 ImGui 不会被强制覆盖。
+                    {
+                        ImGuiWindow* imguiWin = ImGui::FindWindowByName("###-AppBox-");
+                        if (imguiWin)
+                        {
+                            ImVec2 ipos = imguiWin->Pos;
+                            ImVec2 isz  = imguiWin->Size;
+                            // 💡 ImGui 窗口标题栏可能仍未渲染（首帧不一定是可用的 Size）。
+                            //    用 g_OSWinW/H 作为 fallback，保证 Win32 居中计算不会崩。
+                            float w = isz.x  > 0 ? isz.x  : (float)g_OSWinW;
+                            float h = isz.y  > 0 ? isz.y  : (float)g_OSWinH;
+                            int hostX = (int)std::floor(ipos.x + (w - HOST_W) * 0.5f);
+                            int hostY = (int)std::floor(ipos.y + (h - HOST_H) * 0.5f);
+                            // 注意：只在 ImGui 窗口位置/大小发生显著变化时挪动 Win32，避免抖动
+                            static int lastHostX = INT_MIN, lastHostY = INT_MIN;
+                            if (lastHostX != hostX || lastHostY != hostY)
+                            {
+                                lastHostX = hostX; lastHostY = hostY;
+                                ::SetWindowPos(hwnd, HWND_BOTTOM, hostX, hostY, HOST_W, HOST_H,
+                                    SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+                            }
+                        }
+                    }
 
-            ImGui::SetNextWindowPos(main_vp->WorkPos, ImGuiCond_Always);
-            ImGui::SetNextWindowSize(main_vp->WorkSize, ImGuiCond_Always);
             // 窗口标志
             ImGuiWindowFlags win_flags = 0;
             //win_flags |= ImGuiWindowFlags_NoMove;         // ❌禁止拖动移动
-            win_flags |= ImGuiWindowFlags_NoResize;       // ❌禁止缩放大小
+            // 🟢 不再禁止缩放大小：让用户能拖边框 resize ImGui 窗口，
+            //    运行时大小由 ImGui 自己管理，退出时通过 g_OSWinW/H + WriteAppBoxRectToIni 持久化到 ini。
+            // win_flags |= ImGuiWindowFlags_NoResize;     // (放开用户拖边框 resize)
            // win_flags |= ImGuiWindowFlags_NoCollapse;     // ❌禁止折叠（去掉右上角最小化按钮）
             // win_flags |= ImGuiWindowFlags_NoTitleBar;    // 可选：要不要标题栏；如果要保留标题栏就不要这个flag
             win_flags |= ImGuiWindowFlags_NoDocking;
@@ -322,36 +464,17 @@ g_SwapChainOccluded = theApp.g_SwapChainOccluded;
                 ImGui::PopFont(); // 🟢 立刻還原！這行之後的所有內容都會變回原本的預設字體
 
 
-                // ==================== 🚀 修正版：Win32 主視窗跟隨折疊縮放（強制置底） ====================
-                static bool lastCollapsedState = false;
+                // ==================== 🚀 折叠高度记忆：仅在未折叠状态持续记录完整的 ImGui 高度 ====================
+                //    WM_CLOSE 在保存到 ini 时会优先使用 g_OSWinH_0，避免把折叠后的
+                //    title-bar 高度写进 ini，下次启动大小被错误缩减。
                 isCollapsed = ImGui::IsWindowCollapsed();
-
-                if (isCollapsed != lastCollapsedState)
+                if (!isCollapsed)
                 {
-                    lastCollapsedState = isCollapsed;
-
-                    int currentW = (int)(g_ResizeWidth * main_scale);
-                    int targetH = 0;
-
-                    if (isCollapsed)
-                    {
-                        g_OSWinH_0 = g_ResizeHeight;
-                        // A. 被折疊了：縮小到只剩標題列高度
-                        float titleBarHeight = ImGui::GetFontSize() + style.FramePadding.y * 2.0f;
-                        targetH = (int)(titleBarHeight);// + style.WindowPadding.y);
-                    }
-                    else
-                    {
-                        // B. 被展開了：還原回原本完整的物理高度
-                        targetH = (int)(g_OSWinH_0 * main_scale);
-                    }
-
-                    // 💡 核心修正：
-                    // 1. 第二個參數不能傳 NULL，必須強制鎖定為 HWND_BOTTOM
-                    // 2. 標記加上 SWP_NOOWNERZORDER，徹底禁止 Windows 調整其與桌面管理器的 Owner 層級關係
-                    ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, currentW, targetH,
-                        SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+                    ImVec2 sz = ImGui::GetWindowSize();
+                    if (sz.y > 0) g_OSWinH_0 = (int)sz.y;
                 }
+                // 注意：Win32 Host 窗口永远固定 20x20，不再跟随 ImGui 折叠收缩。
+                //    ImGui 折叠时由 ImGui 自己裁剪渲染即可。
                 // =====================================================================================
 
 
@@ -770,20 +893,30 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     break;
     case WM_CLOSE: // 💡 視窗準備關閉，此時 HWND 還完全有效！
     {
-        // 1. 趁視窗尚未完全從記憶體消失前，最後一次抓取最新座標到全域變數
-        RECT finalRect;
-        if (g_hwnd && ::GetWindowRect(g_hwnd, &finalRect)) {
-            g_OSWinX = finalRect.left;
-            g_OSWinY = finalRect.top;
-            g_OSWinW = finalRect.right - finalRect.left;
+        // 🟢 现在保存的是 ImGui 窗口位置与大小（不是 Win32 Host）。
+        //    Win32 Host 始终 20x20，ImGui 与之中心对齐，因此可用最后一次的
+        //    ImGui 实际位置/大小更新 g_OSWinX/Y/W/H。
+        ImGuiWindow* imguiWin = ImGui::FindWindowByName("###-AppBox-");
+        if (imguiWin)
+        {
+            ImVec2 p = imguiWin->Pos;
+            ImVec2 s = imguiWin->Size;
+            g_OSWinX = (int)p.x;
+            g_OSWinY = (int)p.y;
+            g_OSWinW = (int)s.x;
             if (isCollapsed)
-            {
-                g_OSWinH = g_OSWinH_0;
-            }
+                g_OSWinH = g_OSWinH_0;       // 折叠态下用折叠前的"完整高度"，不让 title-bar 高度写入 ini
             else
-            {
-                g_OSWinH = finalRect.bottom - finalRect.top;
-            }
+                g_OSWinH = (int)s.y;
+        }
+
+        // 🟢 把当前 ImGui 窗口 Rect 写回 imgui.ini 的 [Window][-AppBox-] 节点，
+        //    下次启动 LoadAppBoxRectFromIni 会读回它。
+        if (g_hwnd)
+        {
+            ImGuiIO& ioLocal = ImGui::GetIO();
+            if (ioLocal.IniFilename && ioLocal.IniFilename[0])
+                WriteAppBoxRectToIni(ioLocal.IniFilename, g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH);
         }
     }
     break;

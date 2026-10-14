@@ -142,6 +142,12 @@ void Application::InitImGuiContext(float fScale)
     colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(1.00f, 1.00f, 1.00f, 0.95f);
     colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 
+    // 🚀 隱藏右下角 resize grip 的三條斜線（小三角圖示）：保留可拖拽 resize 的行為，
+    //    僅把 grip 顏色設為完全透明，使用者看不到三角形但仍能拖右下角改變大小。
+    colors[ImGuiCol_ResizeGrip]            = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    colors[ImGuiCol_ResizeGripHovered]     = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    colors[ImGuiCol_ResizeGripActive]      = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+
     colors[ImGuiCol_Button] = ChangeColorBrightness(accClr, 0.7);
     colors[ImGuiCol_ButtonActive] = ChangeColorBrightness(accClr, 0.8);
     colors[ImGuiCol_ButtonHovered] = ChangeColorBrightness(accClr, 1.1);
