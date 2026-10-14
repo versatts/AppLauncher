@@ -18,9 +18,6 @@
 #include <cstdio>   // std::snprintf, fopen, fgets, fread, fwrite
 #include <climits>  // INT_MIN
 
-#include <dwmapi.h>
-#pragma comment(lib, "dwmapi.lib")
-
 #include <shellapi.h>   // Explorer 檔案拖放 (WM_DROPFILES / DragQueryFileW)
 #pragma comment(lib, "shell32.lib")
 
@@ -236,9 +233,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // Create application window
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui-001", nullptr };
     ::RegisterClassExW(&wc);
-    // ==================== 🚀 終極壁紙相容方案：可交互、不擋圖標版 ====================
-     // 💡 核心修復一：移除 WS_EX_TRANSPARENT（滑鼠穿透），這樣按鈕和 Tab 就能正常點擊交互了！
-     // 💡 核心修復二：保留 WS_EX_LAYERED 確保視窗跨越系統純色裁剪優化，100% 正常繪製
+    // ==================== 🚀 Win32 Host 样式：置底 / 不显示任务栏 / 不抢焦点 ====================
+    //    - WS_EX_TOOLWINDOW：不显示在任务栏（普通 WS_POPUP 仍会显示）
+    //    - WS_EX_NOACTIVATE：从不抢焦点，工具窗口标准行为
+    //    - 不再用 WS_EX_LAYERED（20x20 hidden host，不需要合成层级）
+    //    - 不再用 owner = Progman hack：ImGui 内容在 viewports 平台的 platform HWND 上渲染，
+    //      main 20x20 仅作为宿主，不再需要贴在 Progman 下。
+    //    - 不再用 DwmExtendFrameIntoClientArea：没有跨壁纸绘制需求。
 
     // 🟢 ImGui 默认窗口大小（ini 中无记录时使用）
     if (g_OSWinW == 0)
@@ -258,7 +259,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int hostX = g_OSWinX + (g_OSWinW - HOST_W) / 2;
     int hostY = g_OSWinY + (g_OSWinH - HOST_H) / 2;
     HWND hwnd = ::CreateWindowExW(
-        WS_EX_LAYERED,                      // 擴展樣式：僅保留層級，移除穿透
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, // 🟢 工具窗口 + 不抢焦点（不进任务栏、不夺焦点）
         wc.lpszClassName,
         L"-AppBox-",                         // 標題字串
         WS_POPUP | WS_CLIPCHILDREN,          // 標準彈出式（保持頂層身份，D3D才能穩定Present）
@@ -266,24 +267,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         nullptr, nullptr, wc.hInstance, nullptr
     );
     g_hwnd = hwnd;
-    // 設定層級視窗的混色模式（不修改原本的透明度，但激發 Layered 獨立渲染鏈）
-    ::SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
 
-    MARGINS margins = { -1 }; // -1 表示將透明區域擴展至整個窗口
-    ::DwmExtendFrameIntoClientArea(hwnd, &margins);
-
-    // 尋找 Progman 桌面管理器
-    HWND hProgman = ::FindWindowW(L"Progman", L"Program Manager");
-    if (hProgman)
+    // 🟢 让宿主窗口在 explorer 眼里属于"桌面层"：
+    //    把 Progman（explorer 的桌面子窗口）设为 owner，可以躲过"显示桌面"
+    //    (Win+D / 任务栏右端按钮) 对顶层窗口的批量 hide 行为。
+    //    与 DWMA 壁纸嵌入无关——只用 SetWindowLongPtr 改 owner，不需要任何额外 lib。
+    if (HWND hProgman = ::FindWindowW(L"Progman", L"Program Manager"))
     {
-        // 💡 核心魔法：我們不呼叫 SetParent (會被裁剪隱形)，而是透過 SetWindowLongPtrW 
-        // 將系統的 Progman 指定為我們視窗的 Owner（所有者）視窗！
-        // 這樣可以讓視窗在邏輯層級上永久隸屬於桌面，同時保持獨立的渲染表面，不被純色優化給裁剪。
         ::SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, (LONG_PTR)hProgman);
     }
 
-    // 初始將視窗推至最底部（與壁紙同高，絕對不遮擋桌面圖標）
-    ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    // 🟢 立即把宿主窗口置底，避免遮挡桌面图标；SWP_NOACTIVATE 防止它意外抢焦点。
+    ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
     // ============================================================================
 
 
