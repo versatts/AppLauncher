@@ -1,9 +1,9 @@
 ﻿// Dear ImGui: standalone example application for Windows API + DirectX 11
 
 // Learn about Dear ImGui:
-// - FAQ                  https://dearimgui.com/faq
-// - Getting Started      https://dearimgui.com/getting-started
-// - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
+// - FAQ                  https://dearimgui.com
+// - Getting Started      https://dearimgui.com
+// - Documentation        https://dearimgui.com (same as your local docs/ folder).
 // - Introduction, links and more at the top of imgui.cpp
 
 #include "ImGuiObj.h"
@@ -30,20 +30,14 @@
 
 Application theApp;
 // Data
-static ID3D11Device*            g_pd3dDevice = nullptr;
-static ID3D11DeviceContext*     g_pd3dDeviceContext = nullptr;
-static IDXGISwapChain*          g_pSwapChain = nullptr;
+static ID3D11Device* g_pd3dDevice = nullptr;
+static ID3D11DeviceContext* g_pd3dDeviceContext = nullptr;
+static IDXGISwapChain* g_pSwapChain = nullptr;
 static bool                     g_SwapChainOccluded = false;
 static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
-static ID3D11RenderTargetView*  g_mainRenderTargetView = nullptr;
+static ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
 ImFont* g_TitleTimeFont = nullptr;
-//
-//void InitImGuiContext(float);
-//// Forward declarations of helper functions
-//bool CreateDeviceD3D(HWND hWnd);
-//void CleanupDeviceD3D();
-//void CreateRenderTarget();
-//void CleanupRenderTarget();
+
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 int g_WinW = 600;
@@ -52,39 +46,23 @@ int g_WinH = 400;
 FolderUIData gFUD;
 FolderUI gFU;
 
-// ============================================================
-// 🚀 檔案拖入/拖出功能總開關：
-//    true  = 允許從 Explorer 拖 .lnk/.url 進來，也允許把項目拖出去
-//    false = 兩者全部關閉
-// ============================================================
 bool g_bEnableFileDragIO = true;
-
-// 拖出刪檔後的延遲熱重載分頁：幀末（Present 之後）執行，
-// 避免破壞當前幀渲染循環正在遍歷的 vApp
 static int g_pendingReloadIdx = -1;
 
 TabHeadUI gTabUI;
 ResLoader gRes;
 
-// 🟢 现在 g_OSWinX/Y/W/H 用来保存 ImGui 主窗口（"-AppBox-"）的位置和大小，
-//    而不是 Win32 Host 窗口。Win32 Host 固定为 20x20，ImGui 窗口与之中心对齐。
-//    ImGui 自己会把 [-AppBox-] 的 Pos/Size 写到 imgui.ini，这里负责读取/写入。
-
+// 🟢 g_OSWinX/Y/W/H 用來保存 ImGui 主窗口（"-AppBox-"）的位置和大小
 static int g_OSWinX = 100, g_OSWinY = 100, g_OSWinW = 0, g_OSWinH = 0;
-static int g_OSWinH_0 = 0;          // 折叠前的"完整" ImGui 高度，供保存恢复用
+static int g_OSWinH_0 = 0;          // 折疊前的"完整" ImGui 高度，供保存恢復用
 bool isCollapsed = false;
-static HWND g_hwnd = nullptr;      // Win32 Host 窗口 HWND（20x20，不可改变大小）
+static HWND g_hwnd = nullptr;      // Win32 Host 窗口 HWND
 
-// Win32 Host 窗口固定尺寸：20x20 像素（用于挂载 ImGui，拖动逻辑由 NCHITTEST 提供）
-static constexpr int HOST_W = 20;
-static constexpr int HOST_H = 20;
-
-// ImGui 默认窗口大小（首次启动 / ini 中没有 Pos/Size 时使用）
+// ImGui 默認窗口大小（首次啟動 / ini 中沒有 Pos/Size 時使用）
 static constexpr int DEFAULT_IMGUI_W = 600;
 static constexpr int DEFAULT_IMGUI_H = 400;
 
-// 💡 手动从 imgui.ini 中解析 [Window][-AppBox-] 节点的 Pos= / Size=
-//    用来在 WinMain 中给 ImGui 第一次 Begin 提供初始位置/大小。
+// 手動從 imgui.ini 中解析 [Window][-AppBox-] 節點的 Pos= / Size=
 static void LoadAppBoxRectFromIni(const char* iniPath, bool& found, int& x, int& y, int& w, int& h)
 {
     found = false;
@@ -121,8 +99,7 @@ static void LoadAppBoxRectFromIni(const char* iniPath, bool& found, int& x, int&
     ::fclose(f);
 }
 
-// 写入时也写到 ImGui 默认节点 [Window][-AppBox-] 中（覆盖 Pos= 和 Size=）
-// 这样下一帧 ImGui 自己 SaveIni 时会保留我们的修正值。
+// 寫入時也寫到 ImGui 默認節點 [Window][-AppBox-] 中（覆蓋 Pos= 和 Size=）
 static void WriteAppBoxRectToIni(const char* iniPath, int x, int y, int w, int h)
 {
     if (!iniPath) return;
@@ -130,7 +107,6 @@ static void WriteAppBoxRectToIni(const char* iniPath, int x, int y, int w, int h
     std::string body;
     if (f)
     {
-        // 读全部内容
         fseek(f, 0, SEEK_END);
         long sz = ftell(f);
         fseek(f, 0, SEEK_SET);
@@ -142,7 +118,6 @@ static void WriteAppBoxRectToIni(const char* iniPath, int x, int y, int w, int h
         fclose(f);
     }
 
-    // 在字符串中替换 [Window][-AppBox-] 节点下的 Pos= / Size= 行
     auto replace_or_insert = [&](const std::string& key, int v1, int v2) {
         char needle[64];
         std::snprintf(needle, sizeof(needle), "%s=", key.c_str());
@@ -150,7 +125,6 @@ static void WriteAppBoxRectToIni(const char* iniPath, int x, int y, int w, int h
 
         size_t pos = body.find("[Window][-AppBox-]");
         if (pos == std::string::npos) {
-            // 节点不存在：在末尾追加一个
             if (!body.empty() && body.back() != '\n') body.push_back('\n');
             body += "[Window][-AppBox-]\n";
             body += repl + "\n\n";
@@ -178,12 +152,11 @@ static void WriteAppBoxRectToIni(const char* iniPath, int x, int y, int w, int h
 
         if (!replaced)
         {
-            // 节点存在但没这行：在该节点第一行后插入
             size_t lineEnd = body.find('\n', pos);
             if (lineEnd == std::string::npos) lineEnd = body.size();
             body.insert(lineEnd + 1, repl + "\n");
         }
-    };
+        };
 
     replace_or_insert("Pos", x, y);
     replace_or_insert("Size", w, h);
@@ -195,13 +168,10 @@ static void WriteAppBoxRectToIni(const char* iniPath, int x, int y, int w, int h
         fclose(f);
     }
 }
-// Main code
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-
-    // 全局/静态缓存，一次性加载，不要每帧重复解析+创建纹理
-    ImVec2 iconSize;
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -209,15 +179,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     ImGui::LoadIniSettingsFromDisk(io.IniFilename);
 
-    // 🟢 启动时：从 imgui.ini 的 [Window][-AppBox-] 节点读取上次保存的
-    //    ImGui 窗口 Pos/Size 到 g_OSWinX/Y/W/H。
-    //    如果该节点不存在（首次启动 / 被清空），found 保持 false，下面会用默认值。
     {
         bool iniFound = false;
         LoadAppBoxRectFromIni(io.IniFilename, iniFound, g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH);
         if (iniFound)
         {
-            // 防止异常值：宽/高太小就退回到默认
             if (g_OSWinW < 100) g_OSWinW = 100;
             if (g_OSWinH < 50)  g_OSWinH = 50;
         }
@@ -226,64 +192,42 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int cx = ::GetSystemMetrics(SM_CXSCREEN);
     int cy = ::GetSystemMetrics(SM_CYSCREEN);
 
-    // Make process DPI aware and obtain main monitor scale
     ImGui_ImplWin32_EnableDpiAwareness();
     float main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
 
-    // Create application window
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui-001", nullptr };
     ::RegisterClassExW(&wc);
-    // ==================== 🚀 Win32 Host 样式：置底 / 不显示任务栏 / 不抢焦点 ====================
-    //    - WS_EX_TOOLWINDOW：不显示在任务栏（普通 WS_POPUP 仍会显示）
-    //    - WS_EX_NOACTIVATE：从不抢焦点，工具窗口标准行为
-    //    - 不再用 WS_EX_LAYERED（20x20 hidden host，不需要合成层级）
-    //    - 不再用 owner = Progman hack：ImGui 内容在 viewports 平台的 platform HWND 上渲染，
-    //      main 20x20 仅作为宿主，不再需要贴在 Progman 下。
-    //    - 不再用 DwmExtendFrameIntoClientArea：没有跨壁纸绘制需求。
 
-    // 🟢 ImGui 默认窗口大小（ini 中无记录时使用）
     if (g_OSWinW == 0)
     {
         g_OSWinW = (int)(DEFAULT_IMGUI_W * main_scale);
         g_OSWinH = (int)(DEFAULT_IMGUI_H * main_scale);
-        // 默认 ImGui 窗口位置 = 屏幕中心
         g_OSWinX = (cx - g_OSWinW) / 2;
         g_OSWinY = (cy - g_OSWinH) / 2;
     }
-    // 最小尺寸保护
     if (g_OSWinW < 100) g_OSWinW = 100;
     if (g_OSWinH < 50)  g_OSWinH = 50;
-    g_OSWinH_0 = g_OSWinH;  // 记录"未折叠"高度，用于折叠状态下保存恢复
+    g_OSWinH_0 = g_OSWinH;
 
-    // 🟢 Win32 Host 窗口固定为 20x20，位置 = ImGui 窗口中心
-    int hostX = g_OSWinX + (g_OSWinW - HOST_W) / 2;
-    int hostY = g_OSWinY + (g_OSWinH - HOST_H) / 2;
+    // 🟢 🎯 修正點 1：建立 Win32 視窗時，初始大小直接與 ImGui 窗口的大小完全同步
     HWND hwnd = ::CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, // 🟢 工具窗口 + 不抢焦点（不进任务栏、不夺焦点）
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName,
-        L"-AppBox-",                         // 標題字串
-        WS_POPUP | WS_CLIPCHILDREN,          // 標準彈出式（保持頂層身份，D3D才能穩定Present）
-        hostX, hostY, HOST_W, HOST_H,       // 🟢 固定 20x20
+        L"-AppBox-",
+        WS_POPUP | WS_CLIPCHILDREN,
+        g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH, // 使用 ImGui 的坐標與寬高
         nullptr, nullptr, wc.hInstance, nullptr
     );
     g_hwnd = hwnd;
 
-    // 🟢 让宿主窗口在 explorer 眼里属于"桌面层"：
-    //    把 Progman（explorer 的桌面子窗口）设为 owner，可以躲过"显示桌面"
-    //    (Win+D / 任务栏右端按钮) 对顶层窗口的批量 hide 行为。
-    //    与 DWMA 壁纸嵌入无关——只用 SetWindowLongPtr 改 owner，不需要任何额外 lib。
     if (HWND hProgman = ::FindWindowW(L"Progman", L"Program Manager"))
     {
         ::SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, (LONG_PTR)hProgman);
     }
 
-    // 🟢 立即把宿主窗口置底，避免遮挡桌面图标；SWP_NOACTIVATE 防止它意外抢焦点。
     ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-    // ============================================================================
 
-
-    // Initialize Direct3D
     if (!theApp.CreateDeviceD3D(hwnd))
     {
         theApp.CleanupDeviceD3D();
@@ -291,23 +235,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
-g_pd3dDevice = theApp.g_pd3dDevice ;
-g_pd3dDeviceContext = theApp.g_pd3dDeviceContext;
-g_pSwapChain = theApp.g_pSwapChain;
-g_SwapChainOccluded = theApp.g_SwapChainOccluded;
+    g_pd3dDevice = theApp.g_pd3dDevice;
+    g_pd3dDeviceContext = theApp.g_pd3dDeviceContext;
+    g_pSwapChain = theApp.g_pSwapChain;
+    g_SwapChainOccluded = theApp.g_SwapChainOccluded;
 
-    // Show the window
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
 
-    // 🚀 啟用 Explorer 檔案拖放：允許把 .lnk/.url 直接拖進視窗（受總開關控制）
     ::DragAcceptFiles(hwnd, g_bEnableFileDragIO ? TRUE : FALSE);
 
-    // Setup Dear ImGui context
     theApp.InitImGuiContext(main_scale);
     g_TitleTimeFont = theApp.g_TitleTimeFont;
 
-    // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
@@ -321,17 +261,11 @@ g_SwapChainOccluded = theApp.g_SwapChainOccluded;
     }
 
     ImGuiStyle& style = ImGui::GetStyle();
-    // ==================================================================
-
-    // Our state
     ImVec4 clear_color = ImVec4(1.0f, 1.0f, 1.0f, 0.0f);
 
-    // Main loop
     bool done = false;
     while (!done)
     {
-        // Poll and handle messages (inputs, window resize, etc.)
-        // See the WndProc() function below for our to dispatch events to the Win32 backend.
         MSG msg;
         while (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE))
         {
@@ -343,7 +277,6 @@ g_SwapChainOccluded = theApp.g_SwapChainOccluded;
         if (done)
             break;
 
-        // Handle window being minimized or screen locked
         if (g_SwapChainOccluded && g_pSwapChain->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED)
         {
             ::Sleep(10);
@@ -351,367 +284,183 @@ g_SwapChainOccluded = theApp.g_SwapChainOccluded;
         }
         g_SwapChainOccluded = false;
 
-        // Handle window resize (we don't resize directly in the WM_SIZE handler)
         if (g_ResizeWidth != 0 && g_ResizeHeight != 0)
         {
             theApp.CleanupRenderTarget();
             g_pSwapChain->ResizeBuffers(0, g_ResizeWidth, g_ResizeHeight, DXGI_FORMAT_UNKNOWN, 0);
-//            g_ResizeWidth = g_ResizeHeight = 0;
             theApp.CreateRenderTarget();
             g_mainRenderTargetView = theApp.g_mainRenderTargetView;
         }
 
-        // Start the Dear ImGui frame
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
-        // 0. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
+        {
+            static bool show_close_confirmation = false;
+
+            // 🟢 🎯 修正點 2：每幀精準同步 Win32 宿主視窗的大小的與位置到與 ImGui 主窗口一致
+            {
+                ImGuiWindow* imguiWin = ImGui::FindWindowByName("###-AppBox-");
+                if (imguiWin)
                 {
-                    static bool show_close_confirmation = false;
+                    ImVec2 ipos = imguiWin->Pos;
+                    ImVec2 isz = imguiWin->Size;
 
-                    // 🟢 每帧把 Win32 Host(20x20) 同步到 ImGui 主窗口中心，保持"中心对齐"。
-                    //    启动时已经给 ImGui 设置过一次初始 Pos/Size（来自 ini / 默认值）；
-                    //    此后 ImGui 自己管理位置（拖动、保存），我们不再 SetNextWindowPos，
-                    //    这样"移动逻辑不变"——用户拖动 ImGui 不会被强制覆盖。
+                    // Fallback 機制防止首幀異常
+                    int targetX = (int)std::floor(ipos.x);
+                    int targetY = (int)std::floor(ipos.y);
+                    int targetW = isz.x > 0 ? (int)std::floor(isz.x) : g_OSWinW;
+                    int targetH = isz.y > 0 ? (int)std::floor(isz.y) : g_OSWinH;
+
+                    // 只有當位置或大小發生改變時才調用 SetWindowPos，避免多餘的 Win32 重繪抖動
+                    static int lastX = INT_MIN, lastY = INT_MIN, lastW = INT_MIN, lastH = INT_MIN;
+                    if (lastX != targetX || lastY != targetY || lastW != targetW || lastH != targetH)
                     {
-                        ImGuiWindow* imguiWin = ImGui::FindWindowByName("###-AppBox-");
-                        if (imguiWin)
-                        {
-                            ImVec2 ipos = imguiWin->Pos;
-                            ImVec2 isz  = imguiWin->Size;
-                            // 💡 ImGui 窗口标题栏可能仍未渲染（首帧不一定是可用的 Size）。
-                            //    用 g_OSWinW/H 作为 fallback，保证 Win32 居中计算不会崩。
-                            float w = isz.x  > 0 ? isz.x  : (float)g_OSWinW;
-                            float h = isz.y  > 0 ? isz.y  : (float)g_OSWinH;
-                            int hostX = (int)std::floor(ipos.x + (w - HOST_W) * 0.5f);
-                            int hostY = (int)std::floor(ipos.y + (h - HOST_H) * 0.5f);
-                            // 注意：只在 ImGui 窗口位置/大小发生显著变化时挪动 Win32，避免抖动
-                            static int lastHostX = INT_MIN, lastHostY = INT_MIN;
-                            if (lastHostX != hostX || lastHostY != hostY)
-                            {
-                                lastHostX = hostX; lastHostY = hostY;
-                                ::SetWindowPos(hwnd, HWND_BOTTOM, hostX, hostY, HOST_W, HOST_H,
-                                    SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-                            }
-                        }
+                        lastX = targetX; lastY = targetY; lastW = targetW; lastH = targetH;
+                        // 讓 Win32 宿主視窗的位置、寬、高與 ImGui 保持 1:1 完全貼合
+                        ::SetWindowPos(hwnd, HWND_BOTTOM, targetX, targetY, targetW, targetH,
+                            SWP_NOACTIVATE | SWP_NOOWNERZORDER);
                     }
-
-            // 窗口标志
+                }
+            }
             ImGuiWindowFlags win_flags = 0;
-            //win_flags |= ImGuiWindowFlags_NoMove;         // ❌禁止拖动移动
-            // 🟢 不再禁止缩放大小：让用户能拖边框 resize ImGui 窗口，
-            //    运行时大小由 ImGui 自己管理，退出时通过 g_OSWinW/H + WriteAppBoxRectToIni 持久化到 ini。
-            // win_flags |= ImGuiWindowFlags_NoResize;     // (放开用户拖边框 resize)
-           // win_flags |= ImGuiWindowFlags_NoCollapse;     // ❌禁止折叠（去掉右上角最小化按钮）
-            // win_flags |= ImGuiWindowFlags_NoTitleBar;    // 可选：要不要标题栏；如果要保留标题栏就不要这个flag
             win_flags |= ImGuiWindowFlags_NoDocking;
-
             static float f = 0.0f;
             static int counter = 0;
             static bool bOpen = true;
             if (bOpen)
             {
-                //ImGui::Begin("-AppBox-", &bOpen, win_flags);
-// 1. 🎯 核心修正：使用 C++17 標準語法獲取並格式化當前時間
                 auto now = std::chrono::system_clock::now();
                 std::time_t time_now = std::chrono::system_clock::to_time_t(now);
                 std::tm tm_now;
-
-                // 使用安全執行緒的 localtime_s (Windows 環境專用標配)
                 localtime_s(&tm_now, &time_now);
-
-                // 格式化字串緩衝區
                 char timeBuffer[64];
-                // %Y-%m-%d: 2026-09-27 | %a: 星期幾縮寫 (如 Sun) | %H:%M:%S: 時分秒
                 std::strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d (%a) %H:%M:%S", &tm_now);
-
-                // 2. 開啟視窗。使用 "###-AppBox-" 隱藏預設文字，防止與我們手動畫的字疊在一起
                 ImGui::Begin("###-AppBox-", &bOpen, win_flags);
-
-                // 3. 取得畫布與視窗幾何資訊
                 ImDrawList* drawList = ImGui::GetForegroundDrawList();
                 ImVec2 winPos = ImGui::GetWindowPos();
                 float winWidth = ImGui::GetWindowWidth();
-
-                // 計算 Title bar 的高度 (字體高度 + 2 * 上下邊距)
                 float titleBarHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
-
-                // 🎯 核心鎖定：只在標題列計算與繪製時切換字體
-                ImGui::PushFont(g_TitleTimeFont); // 🔴 切換至 Consolas 數字字體
-
-                // A. 計算時間字串的渲染寬度
+                ImGui::PushFont(g_TitleTimeFont);
                 ImVec2 textSize = ImGui::CalcTextSize(timeBuffer);
-
-                // B. 計算靠右的 X 座標：視窗右緣 - 右側留白邊距
-                // 如果有 [X] 關閉按鈕，右邊留 45px 避免重疊，沒有則留 15px
                 float rightMargin = bOpen ? 45.0f : 15.0f;
                 ImVec2 textPos;
                 textPos.x = winPos.x + winWidth - textSize.x - rightMargin;
                 textPos.y = winPos.y + (titleBarHeight - textSize.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
-
-                // C. 繪製右側時間文字
                 drawList->AddText(textPos, IM_COL32(233, 233, 233, 255), timeBuffer);
-
-                // D. 繪製左側原本的視窗標題名稱 "-AppBox-" (也可以共享這個好看字體)
                 ImVec2 leftTextPos(winPos.x + titleBarHeight, textPos.y);
                 drawList->AddText(leftTextPos, IM_COL32(233, 233, 233, 255), "-AppBox-");
-
-                ImGui::PopFont(); // 🟢 立刻還原！這行之後的所有內容都會變回原本的預設字體
-
-
-                // ==================== 🚀 折叠高度记忆：仅在未折叠状态持续记录完整的 ImGui 高度 ====================
-                //    WM_CLOSE 在保存到 ini 时会优先使用 g_OSWinH_0，避免把折叠后的
-                //    title-bar 高度写进 ini，下次启动大小被错误缩减。
+                ImGui::PopFont();
                 isCollapsed = ImGui::IsWindowCollapsed();
                 if (!isCollapsed)
                 {
                     ImVec2 sz = ImGui::GetWindowSize();
                     if (sz.y > 0) g_OSWinH_0 = (int)sz.y;
                 }
-                // 注意：Win32 Host 窗口永远固定 20x20，不再跟随 ImGui 折叠收缩。
-                //    ImGui 折叠时由 ImGui 自己裁剪渲染即可。
-                // =====================================================================================
-
-
-                // 如果被折疊了，後半段的按鈕網格和文字渲染就不用跑了（ImGui 內部會自動跳過，但我們這裡加個防禦）
                 if (!isCollapsed)
                 {
-                    //ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-                   // ImGui::Text(u8"帧率(%.0f FPS)", io.Framerate);
-
                     gTabUI.Render();
-
-                    // 🚀 TAB 拖動排序：同步重排 gvFolder / gvFolderName（分頁 0 恆在第一位），
-                    //    磁碟資料夾的 "NNNN-" 前綴改名由退出時的 PersistOrder 統一完成
                     if (gTabUI.m_pendingTabMoveFrom > 0 && gTabUI.m_pendingTabMoveTo > 0)
                     {
                         gFUD.MoveFolder(gTabUI.m_pendingTabMoveFrom, gTabUI.m_pendingTabMoveTo);
-                        gTabUI.m_arrTab = gFUD.gvFolderName; // 順序已更新，刷新 TAB 名列表
-                        gTabUI.m_tabBarVersion++;            // 換 TabBar ID 強制重建，介面即時套用新順序
-                        gTabUI.m_restoreCountdown = 10;     // 恢復期：持續 SetSelected 至選中對齊（含超時保護）
+                        gTabUI.m_arrTab = gFUD.gvFolderName;
+                        gTabUI.m_tabBarVersion++;
+                        gTabUI.m_restoreCountdown = 10;
                         gTabUI.m_pendingTabMoveFrom = -1;
                         gTabUI.m_pendingTabMoveTo = -1;
                     }
-
                     gFU.Render(hwnd, gFUD);
                 }
-
                 ImGui::End();
             }
-            // 關鍵修改：如果使用者點擊了主視窗的 X（bOpen 變為 false）
             if (!bOpen)
             {
-                // 重設 bOpen 為 true，防止主視窗直接消失，維持畫面渲染
                 bOpen = true;
-                // 開啟模態視窗的觸發開關
                 show_close_confirmation = true;
             }
-
-            // --- 模態確認對話框渲染 ---
             if (show_close_confirmation)
             {
-                // 強制在下一幀打開名為 "ExitConfirmation" 的模態視窗
                 ImGui::OpenPopup("ExitConfirmation");
-
-                // 1. 获取主窗口（视口）的中心点坐标
                 ImGuiViewport* viewport = ImGui::GetMainViewport();
                 ImVec2 center = ImVec2(
                     viewport->Pos.x + viewport->Size.x * 0.5f,
                     viewport->Pos.y + viewport->Size.y * 0.5f
                 );
-
-                // 2. 设置下一个窗口（即即将弹出的 Modal）的中心点对齐到刚才计算的中心点
-                // ImVec2(0.5f, 0.5f) 表示将窗口自身的中心点（轴心）对齐到目标坐标
                 ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
             }
-
-
-            // 開始繪製模態視窗（這會自動讓背景變暗且無法點擊主視窗）
             if (ImGui::BeginPopupModal("ExitConfirmation", NULL, ImGuiWindowFlags_AlwaysAutoResize))
             {
-                // 顯示反差文字（會自動套用你上一題設定的文字顏色）
                 ImGui::Text("確定要關閉程式嗎？");
                 ImGui::Separator();
-
-                // 寬度稍微撐開
                 float button_width = ImGui::GetFontSize() * 5.0f;
-
                 if (ImGui::Button("確定", ImVec2(button_width, 0)))
                 {
                     ImGui::CloseCurrentPopup();
                     show_close_confirmation = false;
-
-                    // 使用者確認要關閉，此時才正式發送 Win32 關閉訊息
                     ::PostMessage(hwnd, WM_CLOSE, 0, 0);
                 }
-
                 ImGui::SameLine();
-
                 if (ImGui::Button("取消", ImVec2(button_width, 0)))
                 {
                     ImGui::CloseCurrentPopup();
                     show_close_confirmation = false;
-                    // 保持 bOpen = true，使用者可以繼續使用主視窗
                 }
-
                 ImGui::EndPopup();
             }
         }
-
-
-        // Rendering
         ImGui::Render();
         const float clear_color_with_alpha[4] = { clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w };
         g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
         g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clear_color_with_alpha);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-
 #if ENABLE_VIEWPORTS
-        // Update and Render additional Platform Windows
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
         {
             ImGui::UpdatePlatformWindows();
             ImGui::RenderPlatformWindowsDefault();
-
-            // g_hWnd：你的主窗口HWND（example里CreateWindowW返回的hwnd变量）
             ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
             for (int i = 0; i < platform_io.Viewports.Size; i++)
             {
                 ImGuiViewport* vp = platform_io.Viewports[i];
                 if (vp == ImGui::GetMainViewport())
-                    continue; // 跳过主视口
-
-                // ✅直接读取公开的PlatformHandleRaw获取HWND，不碰私有结构体
+                    continue;
                 HWND hImGuiWnd = reinterpret_cast<HWND>(vp->PlatformHandleRaw);
                 if (!hImGuiWnd || !::IsWindow(hImGuiWnd))
                     continue;
-
-                // 把ImGui分离窗口放到主窗口之上，非全局置顶，不改动位置大小，不抢焦点
                 ::SetWindowPos(
                     hImGuiWnd,
-                    HWND_TOP,//hwnd,
+                    HWND_TOP,
                     0, 0, 0, 0,
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
                 );
             }
         }
 #endif
-
-        // Present
-        HRESULT hr = g_pSwapChain->Present(1, 0);   // Present with vsync
-        //HRESULT hr = g_pSwapChain->Present(0, 0); // Present without vsync
+        HRESULT hr = g_pSwapChain->Present(1, 0);
         g_SwapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
-
-        // 🚀 拖出刪檔後的延遲熱重載：此刻當前幀已渲染完畢，可安全重建分頁資料
         if (g_pendingReloadIdx != -1)
         {
             gFUD.ReloadFolder(g_pd3dDevice, &gRes, g_pendingReloadIdx);
             g_pendingReloadIdx = -1;
         }
     }
-
-    // Cleanup
-
-    // 🚀 退出時持久化各分頁的顯示順序：
-    //    按當前顯示順序把 lnk/url 重命名為 "0000-原名"、"0001-原名"...
-    //    下次啟動時按前綴排序即可恢復本次順序
     gFUD.PersistOrder();
-
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
-
     theApp.CleanupDeviceD3D();
     ::DestroyWindow(hwnd);
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
-
     CoUninitialize();
     return 0;
 }
-
-//// Helper functions
-//bool CreateDeviceD3D(HWND hWnd)
-//{
-//    // Setup swap chain
-//    // This is a basic setup. Optimally could use e.g. DXGI_SWAP_EFFECT_FLIP_DISCARD and handle fullscreen mode differently. See #8979 for suggestions.
-//    DXGI_SWAP_CHAIN_DESC sd;
-//    ZeroMemory(&sd, sizeof(sd));
-//    sd.BufferCount = 2;
-//    sd.BufferDesc.Width = 0;
-//    sd.BufferDesc.Height = 0;
-//    sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-//    sd.BufferDesc.RefreshRate.Numerator = 60;
-//    sd.BufferDesc.RefreshRate.Denominator = 1;
-//    sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-//    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-//    sd.OutputWindow = hWnd;
-//    sd.SampleDesc.Count = 1;
-//    sd.SampleDesc.Quality = 0;
-//    sd.Windowed = TRUE;
-//    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-//
-//    UINT createDeviceFlags = 0;
-//    //createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
-//    D3D_FEATURE_LEVEL featureLevel;
-//    const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
-//    HRESULT res = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
-//    if (res == DXGI_ERROR_UNSUPPORTED) // Try high-performance WARP software driver if hardware is not available.
-//        res = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
-//    if (res != S_OK)
-//        return false;
-//
-//    // Disable DXGI's default Alt+Enter fullscreen behavior.
-//    // - You are free to leave this enabled, but it will not work properly with multiple viewports.
-//    // - This must be done for all windows associated to the device. Our DX11 backend does this automatically for secondary viewports that it creates.
-//    IDXGIFactory* pSwapChainFactory;
-//    if (SUCCEEDED(g_pSwapChain->GetParent(IID_PPV_ARGS(&pSwapChainFactory))))
-//    {
-//        pSwapChainFactory->MakeWindowAssociation(hWnd, DXGI_MWA_NO_ALT_ENTER);
-//        pSwapChainFactory->Release();
-//    }
-//
-//    CreateRenderTarget();
-//    return true;
-//}
-//
-//void CleanupDeviceD3D()
-//{
-//    CleanupRenderTarget();
-//    if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
-//    if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = nullptr; }
-//    if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = nullptr; }
-//}
-//
-//void CreateRenderTarget()
-//{
-//    ID3D11Texture2D* pBackBuffer;
-//    g_pSwapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
-//    g_pd3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, &g_mainRenderTargetView);
-//    pBackBuffer->Release();
-//}
-//
-//void CleanupRenderTarget()
-//{
-//    if (g_mainRenderTargetView) { g_mainRenderTargetView->Release(); g_mainRenderTargetView = nullptr; }
-//}
-
-// Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-// ============================================================
-// 🚀 拖出確認：刪除該項目對應的 lnk 檔案，並排隊幀末熱重載當前分頁
-// （由 FolderUI 的拖出狀態機在「視窗外鬆開滑鼠」時呼叫）
-// ============================================================
 void AppRemoveDragOutItem(const std::wstring& lnkPath)
 {
     if (lnkPath.empty()) return;
-
     ::DeleteFileW(lnkPath.c_str());
-
-    // 🚀 同步清理同名覆蓋圖標（.png / .ico），避免孤兒文件殘留在 lnk 目錄
-    size_t slash = lnkPath.find_last_of(L"\\/");
+    size_t slash = lnkPath.find_last_of(L"\/");
     size_t dot = lnkPath.find_last_of(L'.');
     if (slash != std::wstring::npos && dot != std::wstring::npos && dot > slash)
     {
@@ -721,38 +470,28 @@ void AppRemoveDragOutItem(const std::wstring& lnkPath)
         for (const wchar_t* e : iconExts)
         {
             std::wstring icon = dir + L"\\" + stem + e;
-            DWORD attr = ::GetFileAttributesW(icon.c_str());
+                DWORD attr = ::GetFileAttributesW(icon.c_str());
             if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY))
             {
                 ::DeleteFileW(icon.c_str());
             }
         }
     }
-
-    // 不能立即 ReloadFolder：當前幀渲染循環仍在遍歷 vApp，clear 會懸空。
-    // 刪檔本身無副作用，排隊到本幀 Present 之後執行重載。
     g_pendingReloadIdx = gTabUI.m_Idx;
 }
-
-// ==================== 🚀 Explorer 檔案拖放：把 .lnk/.url 拖入視窗，自動複製到當前分頁的 lnk 資料夾 ====================
-
 static void HandleDropFiles(HDROP hDrop)
 {
-    // 總開關關閉時直接忽略
     if (!g_bEnableFileDragIO)
     {
         ::DragFinish(hDrop);
         return;
     }
-
     UINT fileCount = ::DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
     if (fileCount == 0)
     {
         ::DragFinish(hDrop);
         return;
     }
-
-    // 當前分頁對應的目標資料夾（分頁 0 = lnk 根目錄，其他 = lnk\<分頁名>）
     int curIdx = gTabUI.m_Idx;
     std::wstring subDir;
     if (curIdx > 0 && curIdx < (int)gFUD.gvFolderName.size())
@@ -765,11 +504,8 @@ static void HandleDropFiles(HDROP hDrop)
         ::DragFinish(hDrop);
         return;
     }
-    ::CreateDirectoryW(targetDir.c_str(), nullptr); // 保證目錄存在（已存在時無副作用）
-
-    // 🚀 拖入的新檔案排在最後：前綴序號 = 目錄現有 .lnk/.url 數量
+    ::CreateDirectoryW(targetDir.c_str(), nullptr);
     int nextPrefix = CountLnkUrlFilesInDir(targetDir);
-
     bool copiedAny = false;
     for (UINT i = 0; i < fileCount; ++i)
     {
@@ -778,74 +514,54 @@ static void HandleDropFiles(HDROP hDrop)
         std::wstring srcPath(len + 1, L'\0');
         if (::DragQueryFileW(hDrop, i, &srcPath[0], len + 1) == 0) continue;
         srcPath.resize(len);
-
-        // 只接受 .lnk / .url / .ico / .png 類型
         if (srcPath.size() < 4) continue;
         const wchar_t* ext = srcPath.c_str() + srcPath.size() - 4;
-
         if (_wcsicmp(ext, L".lnk") == 0 || _wcsicmp(ext, L".url") == 0)
         {
-            // 目標完整路徑 = 目錄 + 排序前綴 + 原檔名
-            // 🚀 自動加上 "NNNN-" 前綴（序號接在現有檔案之後）→ 枚舉時排在最後
-            size_t lastSlash = srcPath.find_last_of(L"\\/");
+            size_t lastSlash = srcPath.find_last_of(L"\/");
             std::wstring fileName = (lastSlash == std::wstring::npos) ? srcPath : srcPath.substr(lastSlash + 1);
-
             WCHAR prefix[8];
             swprintf_s(prefix, L"%04d-", nextPrefix);
             std::wstring dstPath = targetDir + L"\\" + prefix + fileName;
-
-            // 複製（目標已存在同名檔案則跳過，避免重複拖入產生副本）
-            if (::CopyFileW(srcPath.c_str(), dstPath.c_str(), FALSE))
-            {
-                copiedAny = true;
-                ++nextPrefix; // 只有成功加入才消耗一個序號
-            }
+                if (::CopyFileW(srcPath.c_str(), dstPath.c_str(), FALSE))
+                {
+                    copiedAny = true;
+                    ++nextPrefix;
+                }
         }
         else if (_wcsicmp(ext, L".ico") == 0 || _wcsicmp(ext, L".png") == 0)
         {
-            // 🚀 圖標覆蓋：拖到某個項目的圖標按鈕上 → 拷貝到該項目同目錄並改為同名圖標
             POINT pt;
             if (::DragQueryPoint(hDrop, &pt) && gFU.ApplyIconToItem(pt, srcPath))
             {
-                copiedAny = true; // 觸發當前分頁熱重載，立即顯示新圖標
+                copiedAny = true;
             }
         }
     }
     ::DragFinish(hDrop);
-
-    // 有新檔案加入時熱重載當前分頁，介面即刻顯示
     if (copiedAny)
     {
         gFUD.ReloadFolder(g_pd3dDevice, &gRes, curIdx);
     }
 }
-
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
-
     switch (msg)
     {
     case WM_NCHITTEST:
     {
-        // 1. 取得滑鼠在螢幕上的座標，並精準轉換為視窗內部客戶區座標
-        // (int)(short) 寫法可以完美相容多螢幕負數座標，不需額外引入標頭檔
         POINT pt = { (int)(short)LOWORD(lParam), (int)(short)HIWORD(lParam) };
-        POINT screenPt = pt; // 保留一份螢幕座標
+        POINT screenPt = pt;
         ::ScreenToClient(hWnd, &pt);
-
-        // 2. 手動計算縮放邊框 (Border) 區域
         RECT rc;
         ::GetClientRect(hWnd, &rc);
-        const int border = 8; // 💡 縮放感應寬度（像素），如果覺得難點可以調大到 10 或 12
-
+        const int border = 8;
         bool left = (pt.x < border);
         bool right = (pt.x > rc.right - border);
         bool top = (pt.y < border);
         bool bottom = (pt.y > rc.bottom - border);
-
-        // 3. 如果滑鼠落在邊緣，直接回傳對應的縮放訊號
         if (!isCollapsed)
         {
             if (top && left)     return HTTOPLEFT;
@@ -857,41 +573,28 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         if (left)            return HTLEFT;
         if (right)           return HTRIGHT;
-
-        // 4. 如果不在邊緣，再精準判斷是否在 ImGui 的標題列上
         ImGuiWindow* pWin = ImGui::FindWindowByName("-AppBox-");
         if (pWin)
         {
             ImRect titleRect = pWin->TitleBarRect();
-
-            // 排除左右兩邊的按鈕空間（如選單、關閉按鈕等）
             float h = titleRect.GetHeight();
             titleRect.Min.x += h;
             titleRect.Max.x -= h;
-
-            // 💡 關鍵修正：ImGui 的 TitleBarRect() 拿到的是相對於 ImGui 主畫布的座標（工作區座標）
-            // 由於我們前面已經把 pt 轉換成 Client 座標了，這裡直接比對才會百分之百精準！
 #if ENABLE_VIEWPORTS
             if (titleRect.Contains(ImVec2((float)screenPt.x, (float)screenPt.y)))
 #else
             if (titleRect.Contains(ImVec2((float)pt.x, (float)pt.y)))
 #endif
             {
-                return HTCAPTION; // 觸發拖動視窗
+                return HTCAPTION;
             }
         }
-
-        return HTCLIENT; // 既不是邊框也不是標題列，交給 ImGui 點擊按鈕
+        return HTCLIENT;
     }
     case WM_CREATE:
+        break;
+    case WM_CLOSE:
     {
-    }
-    break;
-    case WM_CLOSE: // 💡 視窗準備關閉，此時 HWND 還完全有效！
-    {
-        // 🟢 现在保存的是 ImGui 窗口位置与大小（不是 Win32 Host）。
-        //    Win32 Host 始终 20x20，ImGui 与之中心对齐，因此可用最后一次的
-        //    ImGui 实际位置/大小更新 g_OSWinX/Y/W/H。
         ImGuiWindow* imguiWin = ImGui::FindWindowByName("###-AppBox-");
         if (imguiWin)
         {
@@ -901,13 +604,10 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             g_OSWinY = (int)p.y;
             g_OSWinW = (int)s.x;
             if (isCollapsed)
-                g_OSWinH = g_OSWinH_0;       // 折叠态下用折叠前的"完整高度"，不让 title-bar 高度写入 ini
+                g_OSWinH = g_OSWinH_0;
             else
                 g_OSWinH = (int)s.y;
         }
-
-        // 🟢 把当前 ImGui 窗口 Rect 写回 imgui.ini 的 [Window][-AppBox-] 节点，
-        //    下次启动 LoadAppBoxRectFromIni 会读回它。
         if (g_hwnd)
         {
             ImGuiIO& ioLocal = ImGui::GetIO();
@@ -919,14 +619,14 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_SIZE:
         if (wParam == SIZE_MINIMIZED)
             return 0;
-        g_ResizeWidth = (UINT)LOWORD(lParam); // Queue resize
+        g_ResizeWidth = (UINT)LOWORD(lParam);
         g_ResizeHeight = (UINT)HIWORD(lParam);
         return 0;
     case WM_DROPFILES:
         HandleDropFiles((HDROP)wParam);
         return 0;
     case WM_SYSCOMMAND:
-        if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
+        if ((wParam & 0xfff0) == SC_KEYMENU)
             return 0;
         break;
     case WM_DESTROY:
@@ -935,176 +635,3 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
-
-//void InitImGuiContext(float fScale)
-//{
-////    IMGUI_CHECKVERSION();
-// //   ImGui::CreateContext();
-//
-//  //  RegisterWin32IniHandler();
-//
-//
-//
-//    ImGuiIO& io = ImGui::GetIO();
-//    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-//    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-//    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
-//#if ENABLE_VIEWPORTS
-//    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
-//#endif 
-//    //io.ConfigViewportsNoAutoMerge = true;
-//    //io.ConfigViewportsNoTaskBarIcon = true;
-//    //io.ConfigDockingAlwaysTabBar = true;
-//    //io.ConfigDockingTransparentPayload = true;
-//
-//    // Setup Dear ImGui style
-//    //ImGui::StyleColorsDark();
-//    //ImGui::StyleColorsLight();
-//    ImGui::StyleColorsClassic();
-//
-//    // Setup scaling
-//    ImGuiStyle& style = ImGui::GetStyle();
-//    style.ScaleAllSizes(fScale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
-//    style.FontScaleDpi = fScale;        // Set initial font scale. (in docking branch: using io.ConfigDpiScaleFonts=true automatically overrides this for every window depending on the current monitor)
-//    io.ConfigDpiScaleFonts = true;          // [Experimental] Automatically overwrite style.FontScaleDpi in Begin() when Monitor DPI changes. This will scale fonts but _NOT_ scale sizes/padding for now.
-//    io.ConfigDpiScaleViewports = true;      // [Experimental] Scale Dear ImGui and Platform Windows when Monitor DPI changes.
-//
-//    style.FramePadding.x = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
-//    style.FramePadding.y = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
-//    style.FrameRounding = 10.0f;
-//
-//    style.TabRounding = 3.0f; // Rounded tops
-//    style.TabBorderSize = 0.0f; // 💡 CHANGED: Force 1-pixel frame around the tab headers
-//
-//    ImVec4* colors = style.Colors;
-//#if 1
-//    auto ChangeColorBrightness = [](const ImVec4& color, float factor)->ImVec4 {
-//        return ImVec4(
-//            std::clamp(color.x * factor, 0.0f, 1.0f),
-//            std::clamp(color.y * factor, 0.0f, 1.0f),
-//            std::clamp(color.z * factor, 0.0f, 1.0f),
-//            color.w
-//        );
-//        };
-//    // 1. 獲取系統 Windows 強調色字串 (例如 "#4B4B52")
-//    std::string winColorStr = GetWindowsAccentColor();
-//    ImVec4 accClr = IMVEC4(winColorStr);
-//    // 2. 核心背景色設置
-//    // 視窗背景 (WindowBg) 與 標題列 (TitleBg) 都套用系統主色
-//    colors[ImGuiCol_WindowBg] = ChangeColorBrightness(accClr, 0.5);
-//    colors[ImGuiCol_FrameBg] = ChangeColorBrightness(accClr, 0.8);
-//    colors[ImGuiCol_TitleBg] = ChangeColorBrightness(accClr, 0.3);
-//    colors[ImGuiCol_TitleBgActive] = accClr;
-//    colors[ImGuiCol_TitleBgCollapsed] = IMVEC4(winColorStr, 0.4f); 
-//
-//    colors[ImGuiCol_Tab] = ChangeColorBrightness(accClr, 0.7);
-//    colors[ImGuiCol_TabActive] = ChangeColorBrightness(accClr, 0.8);
-//    colors[ImGuiCol_TabHovered] = ChangeColorBrightness(accClr, 1.1);
-//
-//    colors[ImGuiCol_Button] = ChangeColorBrightness(accClr, 0.7);
-//    colors[ImGuiCol_ButtonActive] = ChangeColorBrightness(accClr, 0.8);
-//    colors[ImGuiCol_ButtonHovered] = ChangeColorBrightness(accClr, 1.1);
-//
-//    colors[ImGuiCol_ScrollbarBg] = ChangeColorBrightness(accClr, 0.7);
-//    colors[ImGuiCol_ScrollbarGrab] = ChangeColorBrightness(accClr, 0.8);
-//    colors[ImGuiCol_ScrollbarGrabHovered] = ChangeColorBrightness(accClr, 1.1);
-//    colors[ImGuiCol_ScrollbarGrabActive] = ChangeColorBrightness(accClr, 1.1);
-//
-//    // 3. 自動計算「文字反差色」
-//    // 解析出 RGB 的 0.0f - 1.0f 數值
-//    ImVec4 bg = colors[ImGuiCol_WindowBg];
-//
-//    // W3C 相對亮度公式 (Relative Luminance)
-//    // 綠色對人眼最敏感，藍色最不敏感，公式比例：R*0.299 + G*0.587 + B*0.114
-//    float luminance = (bg.x * 0.299f) + (bg.y * 0.587f) + (bg.z * 0.114f);
-//
-//    // 如果背景亮度大於 0.5 (偏亮/淺色)，文字就用黑色；反之用白色
-//    ImVec4 textColor = (luminance > 0.5f) ? ImVec4(0.0f, 0.0f, 0.0f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-//    ImVec4 disabledTextColor = ImVec4(textColor.x, textColor.y, textColor.z, 0.5f); // 半透明做為停用文字
-//
-//    // 4. 套用文字反差色
-//    colors[ImGuiCol_Text] = textColor;
-//    colors[ImGuiCol_TextDisabled] = disabledTextColor;
-//    colors[ImGuiCol_TableHeaderBg] = IMVEC4(winColorStr, 0.8f);
-//#endif
-//#if 0
-//    colors[ImGuiCol_TitleBg] = IMCLR("#FFC90E");
-//    colors[ImGuiCol_TitleBgActive] = IMCLR("#FFC90E");
-//    colors[ImGuiCol_TitleBgCollapsed] = IMCLR("#FF7F27");
-//
-//    colors[ImGuiCol_WindowBg] = IMCLR("#A349A4");
-//    //#37373D
-//    // 1. 窗口主体背景
-//
-//    style.Colors[ImGuiCol_Text] = ImColor(0xFF, 0xFF, 0xFF);      //普通文字
-//    style.Colors[ImGuiCol_TextDisabled] = ImColor(0x80, 0x80, 0x80); //禁用控件文字;
-//
-//    style.Colors[ImGuiCol_FrameBg] = ImColor(40, 40, 40, 255);
-//    style.Colors[ImGuiCol_FrameBgHovered] = ImColor(60, 60, 60, 255);
-//    style.Colors[ImGuiCol_FrameBgActive] = ImColor(80, 80, 80, 255);
-//
-//    style.Colors[ImGuiCol_SliderGrab] = ImColor(60, 180, 255, 255);
-//    style.Colors[ImGuiCol_SliderGrabActive] = ImColor(90, 200, 255, 255);
-//
-//    // Base color exactly matching RGB(85, 85, 85)
-//    style.Colors[ImGuiCol_Button] = ImVec4(0.333f, 0.333f, 0.333f, 1.0f); // RGB(85, 85, 85) - Base Button
-//    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.400f, 0.400f, 0.400f, 1.0f); // RGB(102, 102, 102) - Elevated hover
-//    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Sunken pressed state
-//
-//    // =========================================================================
-//
-//       // ==================== 🚀 FIXED TAB HEADER MATCHING STYLE ====================
-//    // 1. Core Tab Colors
-//    style.Colors[ImGuiCol_Tab] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Inactive tab
-//    style.Colors[ImGuiCol_TabActive] = ImVec4(0.380f, 0.380f, 0.380f, 1.0f); // RGB(97, 97, 97) - Hovered highlight
-//    style.Colors[ImGuiCol_TabHovered] = ImVec4(0.480f, 0.480f, 0.480f, 1.0f); // RGB(55, 55, 55) - Active tab (blends with WindowBg)
-//    // 2. 💡 Frame / Border Customization
-//    // Overriding the border color to make sure it stands out explicitly around your selected items
-//    style.Colors[ImGuiCol_Border] = ImVec4(0.450f, 0.460f, 0.470f, 1.0f); // Sharp contrast gray for wireframe lines
-//
-//    // 3. Geometry Tweak (Enabling Tab Border)
-//    // ============================================================================
-//
-//        // ==================== 🚀 DARK TOOLTIP BACKGROUND ====================
-//    // Deep Charcoal background for all tooltips and popups
-//    style.Colors[ImGuiCol_PopupBg] = ImVec4(0.120f, 0.120f, 0.130f, 0.95f); // Near black with 95% opacity
-//
-//    // Optional: Add a crisp subtle border to frame the tooltip nicely against the backdrop
-//    style.Colors[ImGuiCol_Border] = ImVec4(0.350f, 0.350f, 0.360f, 1.0f); // Sleek charcoal border
-//    style.PopupBorderSize = 1.0f; // Force a 1-pixel outline on popups/tooltips
-//    // ====================================================================
-//#endif
-//
-//    // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
-//    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-//    {
-//        style.WindowRounding = 10.0f;
-//        style.Colors[ImGuiCol_WindowBg].w = 1.f;
-//    }
-//
-//    // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
-//    ImFontConfig cfg;
-//    cfg.OversampleH = 2;
-//    cfg.OversampleV = 2;
-//    cfg.PixelSnapH = true;
-//
-//    // 清除或不要呼叫 AddFontDefaultVector / Bitmap
-//    ImFont* fontYaHei = io.Fonts->AddFontFromFileTTF(
-//        "C:\\Windows\\Fonts\\msyhbd.ttc",
-//        18.0f,
-//        &cfg,
-//        io.Fonts->GetGlyphRangesChineseFull() // 載入完整中文
-//    );
-//
-//    if (fontYaHei != nullptr) {
-//        io.FontDefault = fontYaHei; // 設置全局預設字體
-//    }
-//    else {
-//        // 如果加載失敗的防禦方案：使用系統預設
-//        io.Fonts->AddFontDefault();
-//    }
-//
-//    g_TitleTimeFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consolab.ttf", 16.0f);
-//
-//  //  io.Fonts->Build();
-//}
