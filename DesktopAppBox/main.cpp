@@ -1,11 +1,5 @@
 ﻿// Dear ImGui: standalone example application for Windows API + DirectX 11
 
-// Learn about Dear ImGui:
-// - FAQ                  https://dearimgui.com
-// - Getting Started      https://dearimgui.com
-// - Documentation        https://dearimgui.com (same as your local docs/ folder).
-// - Introduction, links and more at the top of imgui.cpp
-
 #include "ImGuiObj.h"
 #include <d3d11.h>
 #include <tchar.h>
@@ -15,11 +9,13 @@
 #include <ctime>
 #include <cmath>    // std::floor
 #include <string>
-#include <cstdio>   // std::snprintf, fopen, fgets, fread, fwrite
+#include <cstdio>   // std::snprintf
 #include <climits>  // INT_MIN
 
 #include <shellapi.h>   // Explorer 檔案拖放 (WM_DROPFILES / DragQueryFileW)
 #pragma comment(lib, "shell32.lib")
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
 
 #include "Application.h"
 #include "link.h"
@@ -27,6 +23,9 @@
 #include "TabHeadUI.h"
 #include "FolderUIData.h"
 #include "FolderUI.h"
+
+// 內部結構宣告，用於折疊時同步修改 ImGui 快取
+#include <imgui_internal.h>
 
 Application theApp;
 // Data
@@ -52,122 +51,14 @@ static int g_pendingReloadIdx = -1;
 TabHeadUI gTabUI;
 ResLoader gRes;
 
-// 🟢 g_OSWinX/Y/W/H 用來保存 ImGui 主窗口（"-AppBox-"）的位置和大小
+// 全局幾何變數
 static int g_OSWinX = 100, g_OSWinY = 100, g_OSWinW = 0, g_OSWinH = 0;
-static int g_OSWinH_0 = 0;          // 折疊前的"完整" ImGui 高度，供保存恢復用
+static int g_OSWinH_0 = 0;          // 折疊前的"完整" ImGui 高度，供恢復用
 bool isCollapsed = false;
 static HWND g_hwnd = nullptr;      // Win32 Host 窗口 HWND
 
-// ImGui 默認窗口大小（首次啟動 / ini 中沒有 Pos/Size 時使用）
 static constexpr int DEFAULT_IMGUI_W = 600;
 static constexpr int DEFAULT_IMGUI_H = 400;
-
-// 手動從 imgui.ini 中解析 [Window][-AppBox-] 節點的 Pos= / Size=
-static void LoadAppBoxRectFromIni(const char* iniPath, bool& found, int& x, int& y, int& w, int& h)
-{
-    found = false;
-    x = y = w = h = 0;
-    if (!iniPath) return;
-    FILE* f = ::fopen(iniPath, "rt");
-    if (!f) return;
-
-    char line[512];
-    bool inAppBox = false;
-    while (::fgets(line, sizeof(line), f))
-    {
-        if (line[0] == '[')
-        {
-            inAppBox = (::strstr(line, "[-AppBox-]") != nullptr);
-            continue;
-        }
-        if (!inAppBox) continue;
-
-        int tx = 0, ty = 0, tw = 0, th = 0;
-        if (::strncmp(line, "Pos=", 4) == 0 && ::sscanf(line + 4, "%d,%d", &tx, &ty) == 2)
-        {
-            x = tx;
-            y = ty;
-            found = true;
-        }
-        else if (::strncmp(line, "Size=", 5) == 0 && ::sscanf(line + 5, "%d,%d", &tw, &th) == 2)
-        {
-            w = tw;
-            h = th;
-            found = true;
-        }
-    }
-    ::fclose(f);
-}
-
-// 寫入時也寫到 ImGui 默認節點 [Window][-AppBox-] 中（覆蓋 Pos= 和 Size=）
-static void WriteAppBoxRectToIni(const char* iniPath, int x, int y, int w, int h)
-{
-    if (!iniPath) return;
-    FILE* f = ::fopen(iniPath, "rt");
-    std::string body;
-    if (f)
-    {
-        fseek(f, 0, SEEK_END);
-        long sz = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        if (sz > 0 && sz < 4 * 1024 * 1024)
-        {
-            body.assign((size_t)sz, '\0');
-            fread(body.data(), 1, (size_t)sz, f);
-        }
-        fclose(f);
-    }
-
-    auto replace_or_insert = [&](const std::string& key, int v1, int v2) {
-        char needle[64];
-        std::snprintf(needle, sizeof(needle), "%s=", key.c_str());
-        std::string repl = key + "=" + std::to_string(v1) + "," + std::to_string(v2);
-
-        size_t pos = body.find("[Window][-AppBox-]");
-        if (pos == std::string::npos) {
-            if (!body.empty() && body.back() != '\n') body.push_back('\n');
-            body += "[Window][-AppBox-]\n";
-            body += repl + "\n\n";
-            return;
-        }
-
-        size_t next = body.find("\n[", pos);
-        size_t end = (next == std::string::npos) ? body.size() : next;
-
-        bool replaced = false;
-        size_t scan = pos;
-        while (scan < end)
-        {
-            size_t eol = body.find('\n', scan);
-            if (eol == std::string::npos || eol > end) eol = end;
-            std::string l = body.substr(scan, eol - scan);
-            if (l.rfind(needle, 0) == 0)
-            {
-                body.replace(scan, eol - scan, repl);
-                replaced = true;
-                break;
-            }
-            scan = eol + 1;
-        }
-
-        if (!replaced)
-        {
-            size_t lineEnd = body.find('\n', pos);
-            if (lineEnd == std::string::npos) lineEnd = body.size();
-            body.insert(lineEnd + 1, repl + "\n");
-        }
-        };
-
-    replace_or_insert("Pos", x, y);
-    replace_or_insert("Size", w, h);
-
-    f = ::fopen(iniPath, "wt");
-    if (f)
-    {
-        fwrite(body.data(), 1, body.size(), f);
-        fclose(f);
-    }
-}
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -177,17 +68,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ImGui::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO(); (void)io;
-    ImGui::LoadIniSettingsFromDisk(io.IniFilename);
 
-    {
-        bool iniFound = false;
-        LoadAppBoxRectFromIni(io.IniFilename, iniFound, g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH);
-        if (iniFound)
-        {
-            if (g_OSWinW < 100) g_OSWinW = 100;
-            if (g_OSWinH < 50)  g_OSWinH = 50;
-        }
-    }
+    // 🟢 讓 ImGui 啟用原生自動存檔載入機制
+    ImGui::LoadIniSettingsFromDisk(io.IniFilename);
 
     int cx = ::GetSystemMetrics(SM_CXSCREEN);
     int cy = ::GetSystemMetrics(SM_CYSCREEN);
@@ -198,27 +81,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui-001", nullptr };
     ::RegisterClassExW(&wc);
 
-    if (g_OSWinW == 0)
-    {
-        g_OSWinW = (int)(DEFAULT_IMGUI_W * main_scale);
-        g_OSWinH = (int)(DEFAULT_IMGUI_H * main_scale);
-        g_OSWinX = (cx - g_OSWinW) / 2;
-        g_OSWinY = (cy - g_OSWinH) / 2;
-    }
-    if (g_OSWinW < 100) g_OSWinW = 100;
-    if (g_OSWinH < 50)  g_OSWinH = 50;
+    // 🟢 🎯 核心簡化 1：Win32 建立時給予預設值即可。不需要讀寫 Ini 函數。
+    // 因為隨後進入主循環後，ImGui 載入完 ini 會自己把視窗搬到正確的位置，每幀同步代碼會自動把 Win32 拉過去貼合。
+    g_OSWinW = (int)(DEFAULT_IMGUI_W * main_scale);
+    g_OSWinH = (int)(DEFAULT_IMGUI_H * main_scale);
+    g_OSWinX = (cx - g_OSWinW) / 2;
+    g_OSWinY = (cy - g_OSWinH) / 2;
     g_OSWinH_0 = g_OSWinH;
 
-    // 🟢 🎯 修正點 1：建立 Win32 視窗時，初始大小直接與 ImGui 窗口的大小完全同步
     HWND hwnd = ::CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName,
         L"-AppBox-",
         WS_POPUP | WS_CLIPCHILDREN,
-        g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH, // 使用 ImGui 的坐標與寬高
+        g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH,
         nullptr, nullptr, wc.hInstance, nullptr
     );
     g_hwnd = hwnd;
+
+    // Windows 11 強制關閉 OS 圓角裁切，保持純直角
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+    enum { DWMWCP_DONOTROUND = 1 };
+    DWORD cornerPreference = DWMWCP_DONOTROUND;
+    ::DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference, sizeof(cornerPreference));
 
     if (HWND hProgman = ::FindWindowW(L"Progman", L"Program Manager"))
     {
@@ -299,33 +186,33 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         {
             static bool show_close_confirmation = false;
 
-            // 🟢 🎯 修正點 2：每幀精準同步 Win32 宿主視窗的大小的與位置到與 ImGui 主窗口一致
+            // 每幀將 Win32 宿主視窗同步貼合到 ImGui 主視窗的位置
             {
                 ImGuiWindow* imguiWin = ImGui::FindWindowByName("###-AppBox-");
                 if (imguiWin)
                 {
-                    ImVec2 ipos = imguiWin->Pos;
+                    ImVec2 ipos = (imguiWin->Viewport != nullptr) ? imguiWin->Viewport->Pos : imguiWin->Pos;
                     ImVec2 isz = imguiWin->Size;
 
-                    // Fallback 機制防止首幀異常
                     int targetX = (int)std::floor(ipos.x);
                     int targetY = (int)std::floor(ipos.y);
                     int targetW = isz.x > 0 ? (int)std::floor(isz.x) : g_OSWinW;
                     int targetH = isz.y > 0 ? (int)std::floor(isz.y) : g_OSWinH;
 
-                    // 只有當位置或大小發生改變時才調用 SetWindowPos，避免多餘的 Win32 重繪抖動
                     static int lastX = INT_MIN, lastY = INT_MIN, lastW = INT_MIN, lastH = INT_MIN;
                     if (lastX != targetX || lastY != targetY || lastW != targetW || lastH != targetH)
                     {
                         lastX = targetX; lastY = targetY; lastW = targetW; lastH = targetH;
-                        // 讓 Win32 宿主視窗的位置、寬、高與 ImGui 保持 1:1 完全貼合
+
                         ::SetWindowPos(hwnd, HWND_BOTTOM, targetX, targetY, targetW, targetH,
                             SWP_NOACTIVATE | SWP_NOOWNERZORDER);
                     }
                 }
             }
+
             ImGuiWindowFlags win_flags = 0;
             win_flags |= ImGuiWindowFlags_NoDocking;
+
             static float f = 0.0f;
             static int counter = 0;
             static bool bOpen = true;
@@ -337,7 +224,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 localtime_s(&tm_now, &time_now);
                 char timeBuffer[64];
                 std::strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d (%a) %H:%M:%S", &tm_now);
+
                 ImGui::Begin("###-AppBox-", &bOpen, win_flags);
+
                 ImDrawList* drawList = ImGui::GetForegroundDrawList();
                 ImVec2 winPos = ImGui::GetWindowPos();
                 float winWidth = ImGui::GetWindowWidth();
@@ -352,6 +241,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 ImVec2 leftTextPos(winPos.x + titleBarHeight, textPos.y);
                 drawList->AddText(leftTextPos, IM_COL32(233, 233, 233, 255), "-AppBox-");
                 ImGui::PopFont();
+
                 isCollapsed = ImGui::IsWindowCollapsed();
                 if (!isCollapsed)
                 {
@@ -444,23 +334,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             gFUD.ReloadFolder(g_pd3dDevice, &gRes, g_pendingReloadIdx);
             g_pendingReloadIdx = -1;
         }
-    }
-    gFUD.PersistOrder();
-    ImGui_ImplDX11_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext();
-    theApp.CleanupDeviceD3D();
-    ::DestroyWindow(hwnd);
-    ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
-    CoUninitialize();
-    return 0;
+}
+gFUD.PersistOrder();
+ImGui_ImplDX11_Shutdown();
+ImGui_ImplWin32_Shutdown();
+ImGui::DestroyContext();
+theApp.CleanupDeviceD3D();
+::DestroyWindow(hwnd);
+::UnregisterClassW(wc.lpszClassName, wc.hInstance);
+CoUninitialize();
+return 0;
 }
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 void AppRemoveDragOutItem(const std::wstring& lnkPath)
 {
     if (lnkPath.empty()) return;
     ::DeleteFileW(lnkPath.c_str());
-    size_t slash = lnkPath.find_last_of(L"\/");
+    size_t slash = lnkPath.find_last_of(L"/");
     size_t dot = lnkPath.find_last_of(L'.');
     if (slash != std::wstring::npos && dot != std::wstring::npos && dot > slash)
     {
@@ -481,21 +371,17 @@ void AppRemoveDragOutItem(const std::wstring& lnkPath)
 }
 static void HandleDropFiles(HDROP hDrop)
 {
-    // 總開關關閉時直接忽略
     if (!g_bEnableFileDragIO)
     {
         ::DragFinish(hDrop);
         return;
     }
-
     UINT fileCount = ::DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
     if (fileCount == 0)
     {
         ::DragFinish(hDrop);
         return;
     }
-
-    // 當前分頁對應的目標資料夾（分頁 0 = lnk 根目錄，其他 = lnk\<分頁名>）
     int curIdx = gTabUI.m_Idx;
     std::wstring subDir;
     if (curIdx > 0 && curIdx < (int)gFUD.gvFolderName.size())
@@ -508,67 +394,47 @@ static void HandleDropFiles(HDROP hDrop)
         ::DragFinish(hDrop);
         return;
     }
-    ::CreateDirectoryW(targetDir.c_str(), nullptr); // 保證目錄存在
-
-    // 🚀 拖入的新檔案排在最後
+    ::CreateDirectoryW(targetDir.c_str(), nullptr);
     int nextPrefix = CountLnkUrlFilesInDir(targetDir);
-
-    bool copiedAny = false;
     for (UINT i = 0; i < fileCount; ++i)
     {
         UINT len = ::DragQueryFileW(hDrop, i, nullptr, 0);
         if (len == 0) continue;
-
-        // 🎯 核心修正：正確初始化 wstring 緩衝區並傳入 &srcPath[0] 指針
         std::wstring srcPath(len + 1, L'\0');
         if (::DragQueryFileW(hDrop, i, &srcPath[0], len + 1) == 0) continue;
         srcPath.resize(len);
-
         if (srcPath.size() < 4) continue;
         const wchar_t* ext = srcPath.c_str() + srcPath.size() - 4;
-
         if (_wcsicmp(ext, L".lnk") == 0 || _wcsicmp(ext, L".url") == 0)
         {
-            size_t lastSlash = srcPath.find_last_of(L"\\/");
+            size_t lastSlash = srcPath.find_last_of(L"\/");
             std::wstring fileName = (lastSlash == std::wstring::npos) ? srcPath : srcPath.substr(lastSlash + 1);
-
             WCHAR prefix[8];
             swprintf_s(prefix, L"%04d-", nextPrefix);
             std::wstring dstPath = targetDir + L"\\" + prefix + fileName;
-
-            if (::CopyFileW(srcPath.c_str(), dstPath.c_str(), FALSE))
-            {
-                copiedAny = true;
-                ++nextPrefix;
-            }
+                if (::CopyFileW(srcPath.c_str(), dstPath.c_str(), FALSE))
+                {
+                    nextPrefix++;
+                }
         }
         else if (_wcsicmp(ext, L".ico") == 0 || _wcsicmp(ext, L".png") == 0)
         {
             POINT pt;
             if (::DragQueryPoint(hDrop, &pt))
             {
-                // 🎯 核心修正：將 Win32 Client 座標轉換為全域 Screen 座標，與 ImGui::GetItemRectMin() 的口徑完全一致
                 ::ClientToScreen(g_hwnd, &pt);
-                if (gFU.ApplyIconToItem(pt, srcPath))
-                {
-                    copiedAny = true;
-                }
+                gFU.ApplyIconToItem(pt, srcPath);
             }
         }
     }
     ::DragFinish(hDrop);
-
-    if (copiedAny)
-    {
-        gFUD.ReloadFolder(g_pd3dDevice, &gRes, curIdx);
-    }
+    // 直接觸發當前分頁重載
+    gFUD.ReloadFolder(g_pd3dDevice, &gRes, curIdx);
 }
-
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
-
     switch (msg)
     {
     case WM_NCHITTEST:
@@ -576,51 +442,35 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         POINT pt = { (int)(short)LOWORD(lParam), (int)(short)HIWORD(lParam) };
         POINT screenPt = pt;
         ::ScreenToClient(hWnd, &pt);
-
-        // 🟢 確保 Win32 自身的窗口邊框縮放被禁用（永遠不返回 HTLEFT / HTTOP 等系統縮放訊號）
-        // 這樣縮放控制權就會 100% 落在 ImGui 的內部邊緣處理上。
-
-        ImGuiWindow* pWin = ImGui::FindWindowByName("-AppBox-");
-        if (pWin && !isCollapsed) // 折疊狀態下不需要避讓頂部縮放
+        ImGuiWindow* pWin = ImGui::FindWindowByName("###-AppBox-");
+        if (pWin && !isCollapsed)
         {
             ImRect titleRect = pWin->TitleBarRect();
-
-            // 💡 核心修正：計算滑鼠相對於 ImGui 標題列頂端的縱向距離
-            // 判斷是否落入 ImGui 的頂部縮放感應邊界（ImGui 默認邊緣感應大約為 4 像素，這裡用 5.0f 安全避讓）
             float distFromTop = 0.0f;
 #if ENABLE_VIEWPORTS
             distFromTop = (float)screenPt.y - titleRect.Min.y;
 #else
             distFromTop = (float)pt.y - titleRect.Min.y;
 #endif
-
-            // 🎯 如果滑鼠貼近最上方邊緣（0~5 像素內），將控制權讓給 ImGui 進行邊框縮放
             if (distFromTop >= 0.0f && distFromTop <= 5.0f)
             {
-                return HTCLIENT; // 返回 HTCLIENT，Windows 不會截獲，滑鼠事件會直通 ImGui 觸發頂部縮放
-        }
-
-            // 排除左右兩邊的按鈕空間（如選單、關閉按鈕等）
+                return HTCLIENT;
+            }
             float h = titleRect.GetHeight();
             titleRect.Min.x += h;
             titleRect.Max.x -= h;
-
-            // 💡 將頂部縮放邊界從移動判定區中扣除
             titleRect.Min.y += 5.0f;
-
-            // 🎯 當滑鼠避開了最頂端邊緣、且在標題列非按鈕區域內，才判定為「拖動視窗」
 #if ENABLE_VIEWPORTS
             if (titleRect.Contains(ImVec2((float)screenPt.x, (float)screenPt.y)))
 #else
             if (titleRect.Contains(ImVec2((float)pt.x, (float)pt.y)))
 #endif
             {
-                return HTCAPTION; // 🚀 觸發 Windows 系統級視窗移動
+                return HTCAPTION;
             }
-    }
+        }
         else if (pWin && isCollapsed)
         {
-            // 如果視窗處於折疊狀態，滑鼠點擊標題列任一處（排除按鈕）皆允許直接拖動
             ImRect titleRect = pWin->TitleBarRect();
             float h = titleRect.GetHeight();
             titleRect.Min.x += h;
@@ -632,8 +482,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 #endif
                 return HTCAPTION;
         }
-
-        return HTCLIENT; // 其他四周邊緣同樣返回 HTCLIENT，由 ImGui 自身的四邊與四角邊框來處理縮放
+        return HTCLIENT;
     }
     case WM_CREATE:
         break;
@@ -642,22 +491,23 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         ImGuiWindow* imguiWin = ImGui::FindWindowByName("###-AppBox-");
         if (imguiWin)
         {
-            ImVec2 p = imguiWin->Pos;
+            // 🟢 🎯 核心簡化 2：不需要任何檔案寫入函數！
+            // 優先從 Viewport 取得絕對座標，然後直接校正修正 ImGui 記憶體裡的 Ini 快取。
+            ImVec2 p = (imguiWin->Viewport != nullptr) ? imguiWin->Viewport->Pos : imguiWin->Pos;
             ImVec2 s = imguiWin->Size;
-            g_OSWinX = (int)p.x;
-            g_OSWinY = (int)p.y;
-            g_OSWinW = (int)s.x;
-            if (isCollapsed)
-                g_OSWinH = g_OSWinH_0;
-            else
-                g_OSWinH = (int)s.y;
-        }
-
-        if (g_hwnd)
-        {
-            ImGuiIO& ioLocal = ImGui::GetIO();
-            if (ioLocal.IniFilename && ioLocal.IniFilename[0])
-                WriteAppBoxRectToIni(ioLocal.IniFilename, g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH);
+            int finalX = (int)p.x;
+            int finalY = (int)p.y;
+            int finalW = (int)s.x;
+            int finalH = isCollapsed ? g_OSWinH_0 : (int)s.y;
+            // 修正 ImGui 內部快取。這樣 ImGui 隨後在 DestroyContext 時，自動寫出的 imgui.ini 就是完美的絕對座標。
+            if (ImGuiContext* ctx = ImGui::GetCurrentContext())
+            {
+                if (ImGuiWindowSettings* settings = ImGui::FindWindowSettingsByID(imguiWin->ID))
+                {
+                    settings->Pos = ImVec2ih((short)finalX, (short)finalY);
+                    settings->Size = ImVec2ih((short)finalW, (short)finalH);
+                }
+            }
         }
     }
     break;
@@ -671,7 +521,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         HandleDropFiles((HDROP)wParam);
         return 0;
     case WM_SYSCOMMAND:
-        if ((wParam & 0xfff0) == SC_KEYMENU) // 停用 ALT 鍵觸發系統選單
+        if ((wParam & 0xfff0) == SC_KEYMENU)
             return 0;
         break;
     case WM_DESTROY:
@@ -680,5 +530,3 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
-
-

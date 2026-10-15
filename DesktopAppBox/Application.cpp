@@ -103,7 +103,7 @@ void Application::InitImGuiContext(float fScale)
 
     style.FramePadding.x = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
     style.FramePadding.y = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
-    style.FrameRounding = 10.0f;
+    style.FrameRounding = 0.0f;
 
     style.ScrollbarSize = 5.0f; // 🚀 細滾動條（配合 FolderUI 的自動隱藏滾動條；須在 ScaleAllSizes 之後設定）
 
@@ -225,7 +225,7 @@ void Application::InitImGuiContext(float fScale)
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
-        style.WindowRounding = 10.0f;
+        style.WindowRounding = 0.0f;
         style.Colors[ImGuiCol_WindowBg].w = 1.f;
     }
 
