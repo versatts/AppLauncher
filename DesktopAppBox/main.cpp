@@ -481,17 +481,21 @@ void AppRemoveDragOutItem(const std::wstring& lnkPath)
 }
 static void HandleDropFiles(HDROP hDrop)
 {
+    // 總開關關閉時直接忽略
     if (!g_bEnableFileDragIO)
     {
         ::DragFinish(hDrop);
         return;
     }
+
     UINT fileCount = ::DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
     if (fileCount == 0)
     {
         ::DragFinish(hDrop);
         return;
     }
+
+    // 當前分頁對應的目標資料夾（分頁 0 = lnk 根目錄，其他 = lnk\<分頁名>）
     int curIdx = gTabUI.m_Idx;
     std::wstring subDir;
     if (curIdx > 0 && curIdx < (int)gFUD.gvFolderName.size())
@@ -504,46 +508,62 @@ static void HandleDropFiles(HDROP hDrop)
         ::DragFinish(hDrop);
         return;
     }
-    ::CreateDirectoryW(targetDir.c_str(), nullptr);
+    ::CreateDirectoryW(targetDir.c_str(), nullptr); // 保證目錄存在
+
+    // 🚀 拖入的新檔案排在最後
     int nextPrefix = CountLnkUrlFilesInDir(targetDir);
+
     bool copiedAny = false;
     for (UINT i = 0; i < fileCount; ++i)
     {
         UINT len = ::DragQueryFileW(hDrop, i, nullptr, 0);
         if (len == 0) continue;
+
+        // 🎯 核心修正：正確初始化 wstring 緩衝區並傳入 &srcPath[0] 指針
         std::wstring srcPath(len + 1, L'\0');
         if (::DragQueryFileW(hDrop, i, &srcPath[0], len + 1) == 0) continue;
         srcPath.resize(len);
+
         if (srcPath.size() < 4) continue;
         const wchar_t* ext = srcPath.c_str() + srcPath.size() - 4;
+
         if (_wcsicmp(ext, L".lnk") == 0 || _wcsicmp(ext, L".url") == 0)
         {
-            size_t lastSlash = srcPath.find_last_of(L"\/");
+            size_t lastSlash = srcPath.find_last_of(L"\\/");
             std::wstring fileName = (lastSlash == std::wstring::npos) ? srcPath : srcPath.substr(lastSlash + 1);
+
             WCHAR prefix[8];
             swprintf_s(prefix, L"%04d-", nextPrefix);
             std::wstring dstPath = targetDir + L"\\" + prefix + fileName;
-                if (::CopyFileW(srcPath.c_str(), dstPath.c_str(), FALSE))
-                {
-                    copiedAny = true;
-                    ++nextPrefix;
-                }
+
+            if (::CopyFileW(srcPath.c_str(), dstPath.c_str(), FALSE))
+            {
+                copiedAny = true;
+                ++nextPrefix;
+            }
         }
         else if (_wcsicmp(ext, L".ico") == 0 || _wcsicmp(ext, L".png") == 0)
         {
             POINT pt;
-            if (::DragQueryPoint(hDrop, &pt) && gFU.ApplyIconToItem(pt, srcPath))
+            if (::DragQueryPoint(hDrop, &pt))
             {
-                copiedAny = true;
+                // 🎯 核心修正：將 Win32 Client 座標轉換為全域 Screen 座標，與 ImGui::GetItemRectMin() 的口徑完全一致
+                ::ClientToScreen(g_hwnd, &pt);
+                if (gFU.ApplyIconToItem(pt, srcPath))
+                {
+                    copiedAny = true;
+                }
             }
         }
     }
     ::DragFinish(hDrop);
+
     if (copiedAny)
     {
         gFUD.ReloadFolder(g_pd3dDevice, &gRes, curIdx);
     }
 }
+
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))

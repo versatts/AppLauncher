@@ -685,12 +685,9 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 // 🚀 Explorer 圖標拖入：把 .ico/.png 套用到「客戶區座標 pt 命中的項目」上
 //    拷貝到該項目 lnk/url 的同目錄，並改名為同名覆蓋圖標（已存在則覆蓋）
 // ============================================================
-
-bool FolderUI::ApplyIconToItem(POINT clientPt, const std::wstring& srcIconPath)
+bool FolderUI::ApplyIconToItem(POINT screenPt, const std::wstring& srcIconPath)
 {
     // ===== 命中 1（最可靠）：最近一幀懸停的項目 =====
-    // 拖放鬆開前滑鼠必停在目標按鈕上，上一幀的 hover 即為使用者瞄準的項目；
-    // 此判定完全在 ImGui 座標體系內，不受客戶區座標換算影響
     std::wstring targetLnk = m_hoverLnkPath;
 
     // ===== 命中 2：放置點落入哪個項目的格子矩形 =====
@@ -698,8 +695,9 @@ bool FolderUI::ApplyIconToItem(POINT clientPt, const std::wstring& srcIconPath)
     {
         for (const auto& r : m_dropRects)
         {
-            if ((float)clientPt.x >= r.MinX && (float)clientPt.y >= r.MinY &&
-                (float)clientPt.x <= r.MaxX && (float)clientPt.y <= r.MaxY)
+            // 🎯 這裡的 r.Min/Max 來自 ImGui 的螢幕絕對座標，現在與傳入的 screenPt 完美匹配！
+            if ((float)screenPt.x >= r.MinX && (float)screenPt.y >= r.MinY &&
+                (float)screenPt.x <= r.MaxX && (float)screenPt.y <= r.MaxY)
             {
                 targetLnk = r.sLnkPath;
                 break;
@@ -708,8 +706,6 @@ bool FolderUI::ApplyIconToItem(POINT clientPt, const std::wstring& srcIconPath)
     }
 
     // ===== 命中 3（兜底）：距離最近的格子 =====
-    // 容忍格子間隙/座標小偏差：取中心距離最近者，但須在 60px 半徑內，
-    // 避免拖到完全空白處時誤掛到別的項目
     if (targetLnk.empty() && !m_dropRects.empty())
     {
         const ItemRect* best = nullptr;
@@ -718,8 +714,8 @@ bool FolderUI::ApplyIconToItem(POINT clientPt, const std::wstring& srcIconPath)
         {
             float cx = (r.MinX + r.MaxX) * 0.5f;
             float cy = (r.MinY + r.MaxY) * 0.5f;
-            float dx = (float)clientPt.x - cx;
-            float dy = (float)clientPt.y - cy;
+            float dx = (float)screenPt.x - cx;
+            float dy = (float)screenPt.y - cy;
             float d = dx * dx + dy * dy;
             if (d < bestDist)
             {
@@ -735,10 +731,9 @@ bool FolderUI::ApplyIconToItem(POINT clientPt, const std::wstring& srcIconPath)
 
     if (targetLnk.empty())
     {
-        return false; // 沒有命中任何項目
+        return false;
     }
 
-    // 命中：解析該項目 lnk/url 的所在目錄與主檔名（含排序前綴，與磁碟一致）
     size_t slash = targetLnk.find_last_of(L"\\/");
     size_t dot = targetLnk.find_last_of(L'.');
     if (slash == std::wstring::npos || dot == std::wstring::npos || dot < slash)
@@ -748,7 +743,6 @@ bool FolderUI::ApplyIconToItem(POINT clientPt, const std::wstring& srcIconPath)
     std::wstring stem = targetLnk.substr(slash + 1, dot - slash - 1);
     std::wstring dir = targetLnk.substr(0, slash);
 
-    // 源圖標的副檔名（.ico / .png），過短視為無效
     size_t sdot = srcIconPath.find_last_of(L'.');
     if (sdot == std::wstring::npos || sdot + 4 > srcIconPath.size())
     {
@@ -756,9 +750,6 @@ bool FolderUI::ApplyIconToItem(POINT clientPt, const std::wstring& srcIconPath)
     }
     std::wstring iconExt = srcIconPath.substr(sdot);
 
-    // 🚀 保證「立即生效」：CheckSpecificIcon 的優先級是 .png > .ico，
-    //    若項目已有另一格式的同名圖標（如拖 .ico 但已存在 .png），
-    //    新拖的會被舊的搶先 → 這裡把互斥的另一格式刪掉，確保新圖標必定顯示
     const wchar_t* otherExt = (_wcsicmp(iconExt.c_str(), L".ico") == 0) ? L".png" : L".ico";
     std::wstring otherIcon = dir + L"\\" + stem + otherExt;
     DWORD otherAttr = ::GetFileAttributesW(otherIcon.c_str());
@@ -767,7 +758,7 @@ bool FolderUI::ApplyIconToItem(POINT clientPt, const std::wstring& srcIconPath)
         ::DeleteFileW(otherIcon.c_str());
     }
 
-    // 目標 = 同目錄 + 與 lnk/url 同主檔名的覆蓋圖標（同名存在則覆蓋）
     std::wstring dstPath = dir + L"\\" + stem + iconExt;
     return ::CopyFileW(srcIconPath.c_str(), dstPath.c_str(), FALSE) ? true : false;
 }
+
