@@ -568,6 +568,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
+
     switch (msg)
     {
     case WM_NCHITTEST:
@@ -575,27 +576,51 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         POINT pt = { (int)(short)LOWORD(lParam), (int)(short)HIWORD(lParam) };
         POINT screenPt = pt;
         ::ScreenToClient(hWnd, &pt);
-        RECT rc;
-        ::GetClientRect(hWnd, &rc);
-        const int border = 8;
-        bool left = (pt.x < border);
-        bool right = (pt.x > rc.right - border);
-        bool top = (pt.y < border);
-        bool bottom = (pt.y > rc.bottom - border);
-        if (!isCollapsed)
-        {
-            if (top && left)     return HTTOPLEFT;
-            if (top && right)    return HTTOPRIGHT;
-            if (bottom && left)  return HTBOTTOMLEFT;
-            if (bottom && right) return HTBOTTOMRIGHT;
-            if (top)             return HTTOP;
-            if (bottom)          return HTBOTTOM;
-        }
-        if (left)            return HTLEFT;
-        if (right)           return HTRIGHT;
+
+        // 🟢 確保 Win32 自身的窗口邊框縮放被禁用（永遠不返回 HTLEFT / HTTOP 等系統縮放訊號）
+        // 這樣縮放控制權就會 100% 落在 ImGui 的內部邊緣處理上。
+
         ImGuiWindow* pWin = ImGui::FindWindowByName("-AppBox-");
-        if (pWin)
+        if (pWin && !isCollapsed) // 折疊狀態下不需要避讓頂部縮放
         {
+            ImRect titleRect = pWin->TitleBarRect();
+
+            // 💡 核心修正：計算滑鼠相對於 ImGui 標題列頂端的縱向距離
+            // 判斷是否落入 ImGui 的頂部縮放感應邊界（ImGui 默認邊緣感應大約為 4 像素，這裡用 5.0f 安全避讓）
+            float distFromTop = 0.0f;
+#if ENABLE_VIEWPORTS
+            distFromTop = (float)screenPt.y - titleRect.Min.y;
+#else
+            distFromTop = (float)pt.y - titleRect.Min.y;
+#endif
+
+            // 🎯 如果滑鼠貼近最上方邊緣（0~5 像素內），將控制權讓給 ImGui 進行邊框縮放
+            if (distFromTop >= 0.0f && distFromTop <= 5.0f)
+            {
+                return HTCLIENT; // 返回 HTCLIENT，Windows 不會截獲，滑鼠事件會直通 ImGui 觸發頂部縮放
+        }
+
+            // 排除左右兩邊的按鈕空間（如選單、關閉按鈕等）
+            float h = titleRect.GetHeight();
+            titleRect.Min.x += h;
+            titleRect.Max.x -= h;
+
+            // 💡 將頂部縮放邊界從移動判定區中扣除
+            titleRect.Min.y += 5.0f;
+
+            // 🎯 當滑鼠避開了最頂端邊緣、且在標題列非按鈕區域內，才判定為「拖動視窗」
+#if ENABLE_VIEWPORTS
+            if (titleRect.Contains(ImVec2((float)screenPt.x, (float)screenPt.y)))
+#else
+            if (titleRect.Contains(ImVec2((float)pt.x, (float)pt.y)))
+#endif
+            {
+                return HTCAPTION; // 🚀 觸發 Windows 系統級視窗移動
+            }
+    }
+        else if (pWin && isCollapsed)
+        {
+            // 如果視窗處於折疊狀態，滑鼠點擊標題列任一處（排除按鈕）皆允許直接拖動
             ImRect titleRect = pWin->TitleBarRect();
             float h = titleRect.GetHeight();
             titleRect.Min.x += h;
@@ -605,11 +630,10 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 #else
             if (titleRect.Contains(ImVec2((float)pt.x, (float)pt.y)))
 #endif
-            {
                 return HTCAPTION;
-            }
         }
-        return HTCLIENT;
+
+        return HTCLIENT; // 其他四周邊緣同樣返回 HTCLIENT，由 ImGui 自身的四邊與四角邊框來處理縮放
     }
     case WM_CREATE:
         break;
@@ -628,6 +652,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             else
                 g_OSWinH = (int)s.y;
         }
+
         if (g_hwnd)
         {
             ImGuiIO& ioLocal = ImGui::GetIO();
@@ -646,7 +671,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         HandleDropFiles((HDROP)wParam);
         return 0;
     case WM_SYSCOMMAND:
-        if ((wParam & 0xfff0) == SC_KEYMENU)
+        if ((wParam & 0xfff0) == SC_KEYMENU) // 停用 ALT 鍵觸發系統選單
             return 0;
         break;
     case WM_DESTROY:
@@ -655,3 +680,5 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
+
+
