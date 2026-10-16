@@ -134,7 +134,7 @@ void Application::InitImGuiContext(float fScale)
     colors[ImGuiCol_TextDisabled] = accClr;
 
     colors[ImGuiCol_Tab] = ChangeColorBrightness(accClr, 0.7);
-    colors[ImGuiCol_TabActive] = ChangeColorBrightness(accClr, 0.8);
+    colors[ImGuiCol_TabActive] = ChangeColorBrightness(accClr, 0.95);
     colors[ImGuiCol_TabHovered] = ChangeColorBrightness(accClr, 1.1);
 
     // 🚀 滾動條顏色：5px 細滾動條需要高對比，正常狀態的滑塊(grab)也要清晰可見

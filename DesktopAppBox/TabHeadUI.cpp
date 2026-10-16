@@ -42,7 +42,7 @@ void TabHeadUI::Render()
             {
                 // 只有既非當前頁、滑鼠又沒懸停時，標籤文字才單獨變暗
                 ImVec4 dimmedColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-                dimmedColor.w = 0.45f; // 45% 透明度暗字
+                dimmedColor.w = 0.7f;
                 ImGui::PushStyleColor(ImGuiCol_Text, dimmedColor);
             }
 

@@ -86,7 +86,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     g_OSWinW = (int)(DEFAULT_IMGUI_W * main_scale);
     g_OSWinH = (int)(DEFAULT_IMGUI_H * main_scale);
     g_OSWinX = (cx - g_OSWinW) / 2;
-    g_OSWinY = (cy - g_OSWinH) / 2;
+    g_OSWinY = 0;
     g_OSWinH_0 = g_OSWinH;
 
     HWND hwnd = ::CreateWindowExW(

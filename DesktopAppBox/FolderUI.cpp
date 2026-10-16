@@ -69,23 +69,23 @@ namespace
     {
         // 基礎參數
         ImVec2 iconSize        = ImVec2(64.0f, 64.0f);
-        float  itemSpacingX    = 5.0f;   // 圖標之間固定的橫向間距
-        float  itemSpacingY    = 10.0f;  // 圖標單元之間的縱向間距
+        float  itemSpacingX    = 4.0f;   // 圖標之間固定的橫向間距
+        float  itemSpacingY    = 4.0f;  // 圖標單元之間的縱向間距
         float  textBlockHeight = 20.0f;  // 文字塊的固定高度
         float  textGap         = 4.0f;   // 圖標與下方文字塊之間的微小間距
-        float  minPadding      = 10.0f;  // 左右最小 Padding
+        float  sidePadding      = 5.0f;  // 左右最小 Padding
         float  topPadding      = 5.0f;   // 上邊沿固定的 Padding
 
         // 計算結果
         bool   bShowText       = true;
-        float  buttonWidth     = 0.0f;
-        float  buttonHeight    = 0.0f;
+        ImVec2 btnSize;
         float  totalCellHeight = 0.0f;   // 單個單元（含文字塊）總高
         float  dynamicPadding  = 0.0f;   // 水平置中 Padding
         int    maxItemsPerRow  = 1;
         ImVec2 startPos        = ImVec2(0.0f, 0.0f); // 內容繪製起始位置（已含 topPadding）
     };
 
+    int btnPadding = 6;
     // 依當前子視窗寬度與項目數量，計算換行與置中所需的全部幾何
     GridLayout CalcGridLayout(bool bShowText, size_t itemCount)
     {
@@ -93,37 +93,25 @@ namespace
 
         GridLayout g;
         g.bShowText = bShowText;
-        g.buttonWidth  = g.iconSize.x + style.FramePadding.x * 2.0f;
-        g.buttonHeight = g.iconSize.y + style.FramePadding.y * 2.0f;
-        g.totalCellHeight = g.buttonHeight;
+        float w = g.iconSize.x + btnPadding * 2.0f;
+        float h = g.iconSize.y + btnPadding * 2.0f;
+        g.btnSize.x = w;
+        g.btnSize.y = h;
+        g.totalCellHeight = h;
         if (bShowText)
         {
-            g.totalCellHeight = g.buttonHeight + g.textGap + g.textBlockHeight;
+            g.totalCellHeight = h + g.textGap + g.textBlockHeight;
         }
 
         // 💡 穩定寬度：GetContentRegionAvail().x 是動態值（滾動條出現時自動扣減），
         //    這裡改用子視窗自身總寬 GetWindowSize().x（恆定，滾動條僅懸浮不佔位）
         float windowWidth = ImGui::GetWindowSize().x;
 
-        g.maxItemsPerRow = (int)((windowWidth - (g.minPadding * 2.0f) + g.itemSpacingX) / (g.buttonWidth + g.itemSpacingX));
+        g.maxItemsPerRow = (int)((windowWidth - 2 * g.sidePadding) / (w + 2 * g.itemSpacingX));
         if (g.maxItemsPerRow < 1) g.maxItemsPerRow = 1;
 
-        // 首行項目數（用於計算整體水平置中）
-        int itemsInFirstRow = (int)itemCount;
-        if (itemsInFirstRow > g.maxItemsPerRow) {
-            itemsInFirstRow = g.maxItemsPerRow;
-        }
+        float totalItemsWidth = g.maxItemsPerRow * (w + 2 * g.itemSpacingX);
 
-        float totalItemsWidth = (itemsInFirstRow * g.buttonWidth) + ((itemsInFirstRow - 1) * g.itemSpacingX);
-        if (itemsInFirstRow <= 1) {
-            totalItemsWidth = g.buttonWidth;
-        }
-
-        // 💡 絕對居中：dynamicPadding 直接是「按鈕塊左緣的視窗座標」(winW - 總寬)/2，
-        //    以使用者實際看到的子視窗為基準數學對稱，左右留白嚴格相等。
-        //    不經過 WindowPadding / cursor 初始值等任何中間量（那些會隨 DPI 縮放、
-        //    邊框、主題而引入偏差），也與滾動條出現與否完全無關。
-        //    注意：SetCursorPos 使用視窗座標（相對子視窗左上角），與此口徑一致。
         g.dynamicPadding = (windowWidth - totalItemsWidth) / 2.0f;
 
         // 💡 先套用頂部間距，避免內容黏在子視窗最上緣
@@ -184,8 +172,10 @@ namespace
     // 單個 App 項目：圖標按鈕 + 點擊啟動 + 拖曳排序
     // ============================================================
     void RenderAppButton(HWND hwnd, const ST_APP& app, const char* btnId, size_t itemIdx,
-                         ImVec2 iconSize, int& moveFrom, int& moveTo)
+                         ImVec2 iconSize, int padding, int& moveFrom, int& moveTo)
     {
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padding, padding));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, padding * 2);
         if (ImGui::ImageButton(btnId, (ImTextureID)app.iconSrv, iconSize))
         {
             // 🚀 工作目錄設為目標程式所在目錄：否則目標 exe 會繼承啟動器的
@@ -204,6 +194,7 @@ namespace
                 ShellExecuteW(hwnd, L"open", app.exePathBuf, pArgs, nullptr, SW_SHOW);
             }
         }
+        ImGui::PopStyleVar(2);
 
         // 1. 拖曳來源 (Source)
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
@@ -357,7 +348,7 @@ namespace
         drawList->AddRectFilled(textBlockMin, textBlockMax, bgColor, 4.0f);
 
         const float textPaddingX = 4.0f;
-        float maxTextWidth = g.buttonWidth - (textPaddingX * 2.0f);
+        float maxTextWidth = g.btnSize.x - (textPaddingX * 2.0f);
         // 文字垂直置中於文字塊
         float textY = textBlockMin.y + (g.textBlockHeight - ImGui::GetTextLineHeight()) * 0.5f;
         ImU32 textColor = ImGui::GetColorU32(ImGuiCol_Text);
@@ -378,7 +369,7 @@ namespace
             bool apply = false;
 
             ImGui::SetCursorScreenPos(textBlockMin);
-            ImGui::SetNextItemWidth(g.buttonWidth);
+            ImGui::SetNextItemWidth(g.btnSize.x);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
             if (s_editFrames == 0)
@@ -418,7 +409,7 @@ namespace
         if (textSize.x <= maxTextWidth)
         {
             // 短文本：直接水平居中完整顯示
-            float textRenderX = textBlockMin.x + (g.buttonWidth - textSize.x) * 0.5f;
+            float textRenderX = textBlockMin.x + (g.btnSize.x - textSize.x) * 0.5f;
             drawList->AddText(ImVec2(textRenderX, textY), textColor, app.sDisplay.c_str());
             return;
         }
@@ -568,7 +559,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 
             // 計算當前單元的絕對 X 與 Y 座標
             // X 用視窗座標（dynamicPadding 已是按鈕塊左緣的視窗座標，絕對居中）
-            float targetX = g.dynamicPadding + (col * (g.buttonWidth + g.itemSpacingX));
+            float targetX = g.dynamicPadding + (col * (g.btnSize.x + 2 * g.itemSpacingX));
             float targetY = g.startPos.y + (row * (g.totalCellHeight + g.itemSpacingY));
 
             // 更新最後一行涵蓋的最大高度
@@ -580,7 +571,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             ImGui::SetCursorPosX(targetX);
             ImGui::SetCursorPosY(targetY);
 
-            RenderAppButton(hwnd, a, szName, i, g.iconSize, moveFrom, moveTo);
+            RenderAppButton(hwnd, a, szName, i, g.iconSize, (g.btnSize.x - g.iconSize.x) / 2, moveFrom, moveTo);
 
             // 🚀 記錄該項目的格子矩形（按鈕+文字塊，與懸停判定範圍一致；客戶區絕對座標）
             {
@@ -642,7 +633,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
                         float ly = (float)pt.y - winPos.y;
 
                         float baseX = g.dynamicPadding;
-                        float stepX = g.buttonWidth + g.itemSpacingX;
+                        float stepX = g.btnSize.x + g.itemSpacingX;
                         float stepY = g.totalCellHeight + g.itemSpacingY;
 
                         // 四捨五入到最近的格子（負值一律夾到 0）
