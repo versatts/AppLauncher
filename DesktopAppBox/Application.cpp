@@ -131,6 +131,8 @@ void Application::InitImGuiContext(float fScale)
     colors[ImGuiCol_TitleBgActive] = accClr;
     colors[ImGuiCol_TitleBgCollapsed] = IMVEC4(winColorStr, 0.4f);
 
+    colors[ImGuiCol_TextDisabled] = accClr;
+
     colors[ImGuiCol_Tab] = ChangeColorBrightness(accClr, 0.7);
     colors[ImGuiCol_TabActive] = ChangeColorBrightness(accClr, 0.8);
     colors[ImGuiCol_TabHovered] = ChangeColorBrightness(accClr, 1.1);
