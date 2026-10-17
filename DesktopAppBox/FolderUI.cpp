@@ -106,11 +106,11 @@ namespace
         // 💡 穩定寬度：GetContentRegionAvail().x 是動態值（滾動條出現時自動扣減），
         //    這裡改用子視窗自身總寬 GetWindowSize().x（恆定，滾動條僅懸浮不佔位）
         float windowWidth = ImGui::GetWindowSize().x;
-
-        g.maxItemsPerRow = (int)((windowWidth - 2 * g.sidePadding) / (w + 2 * g.itemSpacingX));
+        float oneItemW = w + 2 * g.itemSpacingX;
+        g.maxItemsPerRow = (int)((windowWidth - 2 * g.sidePadding) / oneItemW);
         if (g.maxItemsPerRow < 1) g.maxItemsPerRow = 1;
 
-        float totalItemsWidth = g.maxItemsPerRow * (w + 2 * g.itemSpacingX);
+        float totalItemsWidth = g.maxItemsPerRow * oneItemW;
 
         g.dynamicPadding = (windowWidth - totalItemsWidth) / 2.0f;
 
@@ -511,7 +511,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, cGrabH);
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, cGrabA);
 
-    if (ImGui::BeginChild(childWindowId, ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, 0))
+    if (ImGui::BeginChild(childWindowId, ImVec2(0.0f, 0.0f), ImGuiChildFlags_None))
     {
         // 🚀 更新滾動條顯示狀態（供下一幀 sbAlpha 使用）
         {
@@ -668,6 +668,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
         ImGui::SetCursorPosY(maxCalculatedY);
         ImGui::Dummy(ImVec2(0.0f, 1.0f));
     }
+
     ImGui::EndChild(); // 💡 結束子視窗
     ImGui::PopStyleColor(4); // 🚀 彈出自動隱藏滾動條的透明色
 }

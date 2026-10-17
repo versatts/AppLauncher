@@ -101,21 +101,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     );
     g_hwnd = hwnd;
 
-    // Windows 11 強制關閉 OS 圓角裁切，保持純直角
-#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
-#define DWMWA_WINDOW_CORNER_PREFERENCE 33
-#endif
-    enum { DWMWCP_DONOTROUND = 1 };
-    DWORD cornerPreference = DWMWCP_DONOTROUND;
-    ::DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference, sizeof(cornerPreference));
+    // 🚀 【核心修正：開啟 Win32 視窗系統級透明】
+    // 將邊設為 -1，代表將透明區域擴展到整個視窗的客戶區（Sheet of Glass 效果）
+    MARGINS margins = { -1, -1, -1, -1 };
+    ::DwmExtendFrameIntoClientArea(hwnd, &margins);
 
+    //显示桌面时不会被隐藏
     if (HWND hProgman = ::FindWindowW(L"Progman", L"Program Manager"))
     {
         ::SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, (LONG_PTR)hProgman);
     }
 
-    ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 
     if (!theApp.CreateDeviceD3D(hwnd))
     {
@@ -225,7 +221,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 std::tm tm_now;
                 localtime_s(&tm_now, &time_now);
                 char timeBuffer[64];
-                std::strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d (%a) %H:%M:%S", &tm_now);
+                //std::strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d (%a) %H:%M:%S", &tm_now);
+                std::strftime(timeBuffer, sizeof(timeBuffer), "(%a) %H:%M:%S", &tm_now);
 
                 ImGui::Begin("###-AppBox-", &bOpen, win_flags);
 

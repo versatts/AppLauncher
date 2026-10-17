@@ -103,9 +103,8 @@ void Application::InitImGuiContext(float fScale)
 
     style.FramePadding.x = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
     style.FramePadding.y = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
-    style.FrameRounding = 0.0f;
 
-    style.ScrollbarSize = 5.0f; // 🚀 細滾動條（配合 FolderUI 的自動隱藏滾動條；須在 ScaleAllSizes 之後設定）
+    style.ScrollbarSize = 7.0f; // 🚀 細滾動條（配合 FolderUI 的自動隱藏滾動條；須在 ScaleAllSizes 之後設定）
 
     style.TabRounding = 3.0f; // Rounded tops
     style.TabBorderSize = 0.0f; // 💡 CHANGED: Force 1-pixel frame around the tab headers
@@ -137,12 +136,6 @@ void Application::InitImGuiContext(float fScale)
     colors[ImGuiCol_TabActive] = ChangeColorBrightness(accClr, 0.95);
     colors[ImGuiCol_TabHovered] = ChangeColorBrightness(accClr, 1.1);
 
-    // 🚀 滾動條顏色：5px 細滾動條需要高對比，正常狀態的滑塊(grab)也要清晰可見
-    //    （Classic 主題預設的 grab 在深色背景上幾乎看不見，hover 時才亮）
-    colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.20f, 0.20f, 0.20f, 0.35f);
-    colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.90f, 0.90f, 0.90f, 0.85f);
-    colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(1.00f, 1.00f, 1.00f, 0.95f);
-    colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 
     // 🚀 隱藏右下角 resize grip 的三條斜線（小三角圖示）：保留可拖拽 resize 的行為，
     //    僅把 grip 顏色設為完全透明，使用者看不到三角形但仍能拖右下角改變大小。
@@ -154,8 +147,9 @@ void Application::InitImGuiContext(float fScale)
     colors[ImGuiCol_ButtonActive] = ChangeColorBrightness(accClr, 0.8);
     colors[ImGuiCol_ButtonHovered] = ChangeColorBrightness(accClr, 1.1);
 
+    // 🚀 滾動條顏色：5px 細滾動條需要高對比，正常狀態的滑塊(grab)也要清晰可見
     colors[ImGuiCol_ScrollbarBg] = ChangeColorBrightness(accClr, 0.7);
-    colors[ImGuiCol_ScrollbarGrab] = ChangeColorBrightness(accClr, 0.8);
+    colors[ImGuiCol_ScrollbarGrab] = ChangeColorBrightness(accClr, 1.1);
     colors[ImGuiCol_ScrollbarGrabHovered] = ChangeColorBrightness(accClr, 1.1);
     colors[ImGuiCol_ScrollbarGrabActive] = ChangeColorBrightness(accClr, 1.1);
 
@@ -227,7 +221,7 @@ void Application::InitImGuiContext(float fScale)
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
-        style.WindowRounding = 0.0f;
+        style.WindowRounding = 10.0f;
         style.Colors[ImGuiCol_WindowBg].w = 1.f;
     }
 
