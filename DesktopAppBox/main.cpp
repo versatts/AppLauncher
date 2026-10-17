@@ -17,6 +17,7 @@
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
 
+#include "AppConfig.h"
 #include "Application.h"
 #include "link.h"
 #include "ResLoader.h"
@@ -30,7 +31,9 @@
 // 在全域宣告一組變數用來保存最後一刻的視窗幾何資訊
 static int g_FinalWinX = 0, g_FinalWinY = 0, g_FinalWinW = 0, g_FinalWinH = 0;
 static bool g_HasFinalGeometry = false;
+static bool g_bStart = false;
 
+AppConfig gCfg;
 Application theApp;
 // Data
 static ID3D11Device* g_pd3dDevice = nullptr;
@@ -39,30 +42,66 @@ static IDXGISwapChain* g_pSwapChain = nullptr;
 static bool                     g_SwapChainOccluded = false;
 static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
 static ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
-ImFont* g_TitleTimeFont = nullptr;
 
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-int g_WinW = 600;
-int g_WinH = 400;
 
 FolderUIData gFUD;
 FolderUI gFU;
 
-bool g_bEnableFileDragIO = true;
 static int g_pendingReloadIdx = -1;
 
 TabHeadUI gTabUI;
 ResLoader gRes;
 
 // 全局幾何變數
-static int g_OSWinX = 100, g_OSWinY = 100, g_OSWinW = 0, g_OSWinH = 0;
-static int g_OSWinH_0 = 0;          // 折疊前的"完整" ImGui 高度，供恢復用
+static int g_OSWinH = 0;          // 折疊前的"完整" ImGui 高度，供恢復用
 bool isCollapsed = false;
 static HWND g_hwnd = nullptr;      // Win32 Host 窗口 HWND
 
 static constexpr int DEFAULT_IMGUI_W = 600;
 static constexpr int DEFAULT_IMGUI_H = 400;
+
+void ShowCloseConfDlg(bool& show_close_confirmation)
+{
+    if (show_close_confirmation)
+    {
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImVec2 center = ImVec2(
+            viewport->Pos.x + viewport->Size.x * 0.5f,
+            viewport->Pos.y + viewport->Size.y * 0.5f
+        );
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        ImGui::OpenPopup("ExitConfirmation");
+    }
+    if (ImGui::BeginPopupModal("ExitConfirmation", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("確定要關閉程式嗎？");
+        ImGui::Separator();
+        float button_width = ImGui::GetFontSize() * 5.0f;
+        if (ImGui::Button("確定", ImVec2(button_width, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+            show_close_confirmation = false;
+            ::PostMessage(g_hwnd, WM_CLOSE, 0, 0);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("重启", ImVec2(button_width, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+            show_close_confirmation = false;
+            ::PostMessage(g_hwnd, WM_CLOSE, 1, 0);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("取消", ImVec2(button_width, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+            show_close_confirmation = false;
+        }
+
+        ImGui::EndPopup();
+    }
+}
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -75,10 +114,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // 🟢 讓 ImGui 啟用原生自動存檔載入機制
     ImGui::LoadIniSettingsFromDisk(io.IniFilename);
-
-    int cx = ::GetSystemMetrics(SM_CXSCREEN);
-    int cy = ::GetSystemMetrics(SM_CYSCREEN);
-
     ImGui_ImplWin32_EnableDpiAwareness();
     float main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
 
@@ -87,16 +122,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // 🟢 🎯 核心簡化 1：Win32 建立時給予預設值即可。不需要讀寫 Ini 函數。
     // 因為隨後進入主循環後，ImGui 載入完 ini 會自己把視窗搬到正確的位置，每幀同步代碼會自動把 Win32 拉過去貼合。
-    g_OSWinW = (int)(DEFAULT_IMGUI_W * main_scale);
-    g_OSWinH = (int)(DEFAULT_IMGUI_H * main_scale);
-    g_OSWinH_0 = g_OSWinH;
+    int w = (int)(DEFAULT_IMGUI_W * main_scale);
+    int h = (int)(DEFAULT_IMGUI_H * main_scale);
+    g_OSWinH = h;
 
     HWND hwnd = ::CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName,
         L"-AppBox-",
         WS_POPUP | WS_CLIPCHILDREN,
-        0, 0, g_OSWinW, g_OSWinH,
+        0, 0, w, h,
         nullptr, nullptr, wc.hInstance, nullptr
     );
     g_hwnd = hwnd;
@@ -128,10 +163,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
 
-    ::DragAcceptFiles(hwnd, g_bEnableFileDragIO ? TRUE : FALSE);
+    ::DragAcceptFiles(hwnd, gCfg.m_bEnableFileDragIO ? TRUE : FALSE);
 
     theApp.InitImGuiContext(main_scale);
-    g_TitleTimeFont = theApp.g_TitleTimeFont;
 
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
@@ -194,8 +228,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
                     int targetX = (int)std::floor(ipos.x);
                     int targetY = (int)std::floor(ipos.y);
-                    int targetW = isz.x > 0 ? (int)std::floor(isz.x) : g_OSWinW;
-                    int targetH = isz.y > 0 ? (int)std::floor(isz.y) : g_OSWinH;
+                    int targetW = isz.x > 0 ? (int)std::floor(isz.x) : w;
+                    int targetH = isz.y > 0 ? (int)std::floor(isz.y) : h;
 
                     static int lastX = INT_MIN, lastY = INT_MIN, lastW = INT_MIN, lastH = INT_MIN;
                     if (lastX != targetX || lastY != targetY || lastW != targetW || lastH != targetH)
@@ -224,13 +258,63 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 //std::strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d (%a) %H:%M:%S", &tm_now);
                 std::strftime(timeBuffer, sizeof(timeBuffer), "(%a) %H:%M:%S", &tm_now);
 
+                // 🎯 核心修正：如果確認關閉的彈窗正在顯示，將整個主視窗的元件狀態切換為「停用（Disabled）」
+                // 這會讓 ImGui 自動在底層切斷該視窗內的所有滑鼠幾何判定、單擊、雙擊與拖拽
+                if (show_close_confirmation)
+                {
+                    ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                  //  ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.6f); // 可選：讓背景微微變暗，視覺效果更好
+                }
+
                 ImGui::Begin("###-AppBox-", &bOpen, win_flags);
+
+                // ============================================================
+                // 🚀 核心新增：在標題列上繪製自訂進度條
+                // ============================================================
+                {
+                    // 1. 取得進度條需要的所有幾何資訊
+                    ImDrawList* drawList = ImGui::GetForegroundDrawList(); // 使用 Foreground 確保進度條不會被主視窗內容遮擋
+                    ImVec2 winPos = ImGui::GetWindowPos();
+                    float winWidth = ImGui::GetWindowWidth();
+                    float topPadding = ImGui::GetStyle().FramePadding.y;
+                    float barHeight = ImGui::GetFontSize() + topPadding * 2;
+
+                    // 2. 這裡設定你想要的進度數值（0.0f 到 1.0f 之間）
+                    // 💡 實際應用時，你可以把這個變數改成你全域的下載或讀取進度
+                    static float progressValue = 0.65f;
+
+                    // 3. 計算進度條在標題列底部的邊界座標
+                    // 我們把它設計成緊貼在標題列最底端的一條細線（高約 2~3 像素），這樣最精緻且不擋文字
+                    int midx = winPos.x + winWidth / 2;
+                    int midy = barHeight / 2 + winPos.y;
+                    ImVec2 barMin = ImVec2(midx - 50, midy - 5);
+                    ImVec2 barMax = ImVec2(midx + 50, midy + 5);
+
+                    // 4. 繪製進度條背景（淡淡的灰色或深色細條）
+                    drawList->AddRectFilled(barMin, barMax, IM_COL32(60, 60, 60, 180));
+
+                    // 5. 計算當前進度應該達到的寬度，並繪製前方高亮的進度條（例如經典的綠色或藍色）
+                    float currentWidth = (barMax.x - barMin.x) * progressValue;
+                    ImVec2 progressMax = ImVec2(barMin.x + currentWidth, barMax.y);
+
+                    if (progressValue > 0.0f)
+                    {
+                        // 這裡使用高亮的青藍色 (R: 0, G: 162, B: 232)，你也可以換成別的顏色
+                        drawList->AddRectFilled(barMin, progressMax, IM_COL32(0, 162, 232, 255), 1.5f);
+                    }
+
+                    barMin.x -= 1; barMin.y -= 1;
+                    drawList->AddLine(barMin, ImVec2(barMax.x + 1, barMin.y), IM_COL32(30, 30, 30, 200));
+                    drawList->AddLine(barMin, ImVec2(barMin.x, barMax.y + 1), IM_COL32(30, 30, 30, 200));
+                    drawList->AddLine(ImVec2(barMin.x + 1, barMax.y), barMax, IM_COL32(220, 220, 220, 200));
+                    drawList->AddLine(ImVec2(barMax.x, barMin.y + 1), ImVec2(barMax.x, barMax.y + 1), IM_COL32(220, 220, 220, 200));
+                }
 
                 ImDrawList* drawList = ImGui::GetForegroundDrawList();
                 ImVec2 winPos = ImGui::GetWindowPos();
                 float winWidth = ImGui::GetWindowWidth();
                 float titleBarHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
-                ImGui::PushFont(g_TitleTimeFont);
+                ImGui::PushFont(theApp.g_TitleTimeFont);
                 ImVec2 textSize = ImGui::CalcTextSize(timeBuffer);
                 float rightMargin = bOpen ? 45.0f : 15.0f;
                 ImVec2 textPos;
@@ -245,7 +329,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 if (!isCollapsed)
                 {
                     ImVec2 sz = ImGui::GetWindowSize();
-                    if (sz.y > 0) g_OSWinH_0 = (int)sz.y;
+                    if (sz.y > 0) g_OSWinH = (int)sz.y;
                 }
                 if (!isCollapsed)
                 {
@@ -264,41 +348,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 
                 ImGui::End();
+
+                if (show_close_confirmation)
+                {
+                   // ImGui::PopStyleVar();
+                    ImGui::PopItemFlag();
+                }
             }
             if (!bOpen)
             {
                 bOpen = true;
                 show_close_confirmation = true;
             }
-            if (show_close_confirmation)
-            {
-                ImGui::OpenPopup("ExitConfirmation");
-                ImGuiViewport* viewport = ImGui::GetMainViewport();
-                ImVec2 center = ImVec2(
-                    viewport->Pos.x + viewport->Size.x * 0.5f,
-                    viewport->Pos.y + viewport->Size.y * 0.5f
-                );
-                ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-            }
-            if (ImGui::BeginPopupModal("ExitConfirmation", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-            {
-                ImGui::Text("確定要關閉程式嗎？");
-                ImGui::Separator();
-                float button_width = ImGui::GetFontSize() * 5.0f;
-                if (ImGui::Button("確定", ImVec2(button_width, 0)))
-                {
-                    ImGui::CloseCurrentPopup();
-                    show_close_confirmation = false;
-                    ::PostMessage(hwnd, WM_CLOSE, 0, 0);
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("取消", ImVec2(button_width, 0)))
-                {
-                    ImGui::CloseCurrentPopup();
-                    show_close_confirmation = false;
-                }
-                ImGui::EndPopup();
-            }
+
+            ShowCloseConfDlg(show_close_confirmation);
         }
         ImGui::Render();
         const float clear_color_with_alpha[4] = { clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w };
@@ -328,7 +391,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             }
         }
 #endif
-        HRESULT hr = g_pSwapChain->Present(1, 0);
+        HRESULT hr = g_pSwapChain->Present(3, 0);
         g_SwapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
         if (g_pendingReloadIdx != -1)
         {
@@ -366,6 +429,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
     CoUninitialize();
+    if (g_bStart)
+    {
+        // 1. 自動獲取當前 EXE 的完整絕對路徑
+        wchar_t szExePath[MAX_PATH];
+        ::GetModuleFileNameW(nullptr, szExePath, MAX_PATH);
+
+        // 2. 啟動新的 EXE 行程
+        // 使用 ShellExecuteW 是最簡單且安全的方式
+        ::ShellExecuteW(nullptr, L"open", szExePath, nullptr, nullptr, SW_SHOW);
+    }
     return 0;
 }
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -396,7 +469,7 @@ void AppRemoveDragOutItem(const std::wstring& lnkPath)
 static void HandleDropFiles(HDROP hDrop)
 {
     // 總開關關閉時直接忽略
-    if (!g_bEnableFileDragIO)
+    if (!gCfg.m_bEnableFileDragIO)
     {
         ::DragFinish(hDrop);
         return;
@@ -546,12 +619,11 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             g_FinalWinX = (int)p.x;
             g_FinalWinY = (int)p.y;
             g_FinalWinW = (int)s.x;
-            g_FinalWinH = isCollapsed ? g_OSWinH_0 : (int)s.y;
+            g_FinalWinH = isCollapsed ? g_OSWinH : (int)s.y;
             g_HasFinalGeometry = true;
         }
-        // 🚀 核心關鍵：直接通知主循環退出，並且 return 0 阻止 Windows 預設隱藏視窗
-        ::PostQuitMessage(0);
-        return 0;
+
+        g_bStart = (1 == (int)wParam);
     }
     break;
     case WM_SIZE:

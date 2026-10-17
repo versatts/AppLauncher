@@ -14,6 +14,8 @@ public:
 	ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
 	ImFont* g_TitleTimeFont = nullptr;
 
+
+
 	void InitImGuiContext(float);
 	// Forward declarations of helper functions
 	bool CreateDeviceD3D(HWND hWnd);

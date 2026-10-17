@@ -1,9 +1,9 @@
 ﻿#include "FolderUI.h"
 #include "FolderUIData.h"
 #include "link.h"    // StripOrderPrefix（改名時保留排序前綴）
-
+#include "AppConfig.h"
 // 來自 main.cpp：檔案拖入/拖出功能總開關
-extern bool g_bEnableFileDragIO;
+extern AppConfig gCfg;
 // 來自 main.cpp：拖出確認後刪除 lnk 檔案，並排隊幀末熱重載當前分頁
 void AppRemoveDragOutItem(const std::wstring& lnkPath);
 
@@ -209,7 +209,7 @@ namespace
             //    （窗外鬆開 = 刪除 lnk；拖回窗內鬆開 = 移位；ESC = 取消）
             //    注意：不能用 io.MousePos 判斷——滑鼠離開客戶區後視窗收不到 WM_MOUSEMOVE，
             //    io.MousePos 會停在邊緣不再更新，必須主動查詢全域游標位置。
-            if (g_bEnableFileDragIO && !app.sLnkPath.empty())
+            if (gCfg.m_bEnableFileDragIO && !app.sLnkPath.empty())
             {
                 POINT pt;
                 ::GetCursorPos(&pt);
@@ -481,6 +481,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
     {
         return;
     }
+
     int idx = *fud.m_pIdx;
     if (idx < 0 || idx >= fud.gvFolder.size())
     {
@@ -511,7 +512,8 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, cGrabH);
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, cGrabA);
 
-    if (ImGui::BeginChild(childWindowId, ImVec2(0.0f, 0.0f), ImGuiChildFlags_None))
+    ImGuiWindowFlags win_flags = 0;
+    if (ImGui::BeginChild(childWindowId, ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, win_flags))
     {
         // 🚀 更新滾動條顯示狀態（供下一幀 sbAlpha 使用）
         {
