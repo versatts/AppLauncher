@@ -27,6 +27,10 @@
 // 內部結構宣告，用於折疊時同步修改 ImGui 快取
 #include <imgui_internal.h>
 
+// 在全域宣告一組變數用來保存最後一刻的視窗幾何資訊
+static int g_FinalWinX = 0, g_FinalWinY = 0, g_FinalWinW = 0, g_FinalWinH = 0;
+static bool g_HasFinalGeometry = false;
+
 Application theApp;
 // Data
 static ID3D11Device* g_pd3dDevice = nullptr;
@@ -85,8 +89,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // 因為隨後進入主循環後，ImGui 載入完 ini 會自己把視窗搬到正確的位置，每幀同步代碼會自動把 Win32 拉過去貼合。
     g_OSWinW = (int)(DEFAULT_IMGUI_W * main_scale);
     g_OSWinH = (int)(DEFAULT_IMGUI_H * main_scale);
-    g_OSWinX = (cx - g_OSWinW) / 2;
-    g_OSWinY = 0;
     g_OSWinH_0 = g_OSWinH;
 
     HWND hwnd = ::CreateWindowExW(
@@ -94,7 +96,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         wc.lpszClassName,
         L"-AppBox-",
         WS_POPUP | WS_CLIPCHILDREN,
-        g_OSWinX, g_OSWinY, g_OSWinW, g_OSWinH,
+        0, 0, g_OSWinW, g_OSWinH,
         nullptr, nullptr, wc.hInstance, nullptr
     );
     g_hwnd = hwnd;
@@ -262,6 +264,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     }
                     gFU.Render(hwnd, gFUD);
                 }
+
+
                 ImGui::End();
             }
             if (!bOpen)
@@ -334,16 +338,38 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             gFUD.ReloadFolder(g_pd3dDevice, &gRes, g_pendingReloadIdx);
             g_pendingReloadIdx = -1;
         }
-}
-gFUD.PersistOrder();
-ImGui_ImplDX11_Shutdown();
-ImGui_ImplWin32_Shutdown();
-ImGui::DestroyContext();
-theApp.CleanupDeviceD3D();
-::DestroyWindow(hwnd);
-::UnregisterClassW(wc.lpszClassName, wc.hInstance);
-CoUninitialize();
-return 0;
+    }
+    gFUD.PersistOrder();
+    ImGui_ImplDX11_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+    ImGui::DestroyContext();
+    theApp.CleanupDeviceD3D();
+    ::DestroyWindow(hwnd);
+
+    // 2. 🎯 【終極覆蓋方案】在 ImGui 寫完 ini 後，我們手動在檔案末尾追加正確的絕對座標！
+    if (g_HasFinalGeometry)
+    {
+        // 將 io.IniFilename 轉換為可讀的字串路徑
+        std::string iniPath = "imgui.ini";
+
+        // 以「追加模式 (Append)」打開檔案
+        FILE* f = nullptr;
+        fopen_s(&f, iniPath.c_str(), "ab"); // "ab" 代表以二進位追加，防止換行符號問題
+        if (f)
+        {
+            // 直接寫入標準的 ImGui 視窗設定格式
+            // 注意：底部的設定會直接覆蓋掉 ImGui 在上面自動生成的 0,0 錯誤數據！
+            fprintf(f, "\n[Window][###-AppBox-]\n");
+            fprintf(f, "Pos=%d,%d\n", g_FinalWinX, g_FinalWinY);
+            fprintf(f, "Size=%d,%d\n", g_FinalWinW, g_FinalWinH);
+            fprintf(f, "Collapsed=%d\n\n", isCollapsed ? 1 : 0);
+            fclose(f);
+        }
+    }
+
+    ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    CoUninitialize();
+    return 0;
 }
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 void AppRemoveDragOutItem(const std::wstring& lnkPath)
@@ -519,20 +545,16 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             // 優先從 Viewport 取得絕對座標，然後直接校正修正 ImGui 記憶體裡的 Ini 快取。
             ImVec2 p = (imguiWin->Viewport != nullptr) ? imguiWin->Viewport->Pos : imguiWin->Pos;
             ImVec2 s = imguiWin->Size;
-            int finalX = (int)p.x;
-            int finalY = (int)p.y;
-            int finalW = (int)s.x;
-            int finalH = isCollapsed ? g_OSWinH_0 : (int)s.y;
-            // 修正 ImGui 內部快取。這樣 ImGui 隨後在 DestroyContext 時，自動寫出的 imgui.ini 就是完美的絕對座標。
-            if (ImGuiContext* ctx = ImGui::GetCurrentContext())
-            {
-                if (ImGuiWindowSettings* settings = ImGui::FindWindowSettingsByID(imguiWin->ID))
-                {
-                    settings->Pos = ImVec2ih((short)finalX, (short)finalY);
-                    settings->Size = ImVec2ih((short)finalW, (short)finalH);
-                }
-            }
+            // 僅「記錄」數值，先不寫入 ImGui 內部
+            g_FinalWinX = (int)p.x;
+            g_FinalWinY = (int)p.y;
+            g_FinalWinW = (int)s.x;
+            g_FinalWinH = isCollapsed ? g_OSWinH_0 : (int)s.y;
+            g_HasFinalGeometry = true;
         }
+        // 🚀 核心關鍵：直接通知主循環退出，並且 return 0 阻止 Windows 預設隱藏視窗
+        ::PostQuitMessage(0);
+        return 0;
     }
     break;
     case WM_SIZE:
