@@ -281,8 +281,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
                     // 2. 這裡設定你想要的進度數值（0.0f 到 1.0f 之間）
                     // 💡 實際應用時，你可以把這個變數改成你全域的下載或讀取進度
-                    static float progressValue = 0.65f;
-
+                    static float progressValue = 0.9f;
+                    
                     // 3. 計算進度條在標題列底部的邊界座標
                     // 我們把它設計成緊貼在標題列最底端的一條細線（高約 2~3 像素），這樣最精緻且不擋文字
                     int midx = winPos.x + winWidth / 2;
@@ -291,18 +291,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     ImVec2 barMax = ImVec2(midx + 50, midy + 5);
 
                     // 4. 繪製進度條背景（淡淡的灰色或深色細條）
-                    drawList->AddRectFilled(barMin, barMax, IM_COL32(60, 60, 60, 180));
+                    drawList->AddRectFilled(barMin, barMax, IM_COL32(160, 160, 160, 100));
 
-                    // 5. 計算當前進度應該達到的寬度，並繪製前方高亮的進度條（例如經典的綠色或藍色）
+                    // 5. 🎯 核心修改：計算當前進度，並改成從右向左填充
                     float currentWidth = (barMax.x - barMin.x) * progressValue;
-                    ImVec2 progressMax = ImVec2(barMin.x + currentWidth, barMax.y);
+                    // 🟢 這裡改為：高亮條的左端點（起點）是從右邊界 barMax.x 減去當前寬度
+                    ImVec2 progressMin = ImVec2(barMax.x - currentWidth, barMin.y);
 
                     if (progressValue > 0.0f)
                     {
-                        // 這裡使用高亮的青藍色 (R: 0, G: 162, B: 232)，你也可以換成別的顏色
-                        drawList->AddRectFilled(barMin, progressMax, IM_COL32(0, 162, 232, 255), 1.5f);
+                        // 🟢 傳入參數改為 progressMin（新起點）到 barMax（右終點）
+                        drawList->AddRectFilled(progressMin, barMax, IM_COL32(0, 162, 232, 255), 1.5f);
                     }
-
                     barMin.x -= 1; barMin.y -= 1;
                     drawList->AddLine(barMin, ImVec2(barMax.x + 1, barMin.y), IM_COL32(30, 30, 30, 200));
                     drawList->AddLine(barMin, ImVec2(barMin.x, barMax.y + 1), IM_COL32(30, 30, 30, 200));
