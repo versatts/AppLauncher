@@ -24,7 +24,7 @@
 #include "TabHeadUI.h"
 #include "FolderUIData.h"
 #include "FolderUI.h"
-
+#include "ImGuiObj.h"
 // 內部結構宣告，用於折疊時同步修改 ImGui 快取
 #include <imgui_internal.h>
 
@@ -281,14 +281,39 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
                     // 2. 這裡設定你想要的進度數值（0.0f 到 1.0f 之間）
                     // 💡 實際應用時，你可以把這個變數改成你全域的下載或讀取進度
-                    static float progressValue = 0.9f;
-                    
+                    float progressValue = 1.0f;
+                    // 🚀 實作時間比例計算：
+                    {
+                        // 將時間統一轉換為當天的「分鐘數」以便計算
+                        int current_minutes = tm_now.tm_hour * 60 + tm_now.tm_min;
+                        int start_minutes = 8 * 60 + 30;   // 08:30 -> 510 分鐘
+                        int end_minutes = 19 * 60 + 30;   // 19:30 -> 1170 分鐘
+                        //end_minutes = 12 * 60;
+                        if (current_minutes < start_minutes)
+                        {
+                            // 0點 到 8點半時為 1
+                            progressValue = 1.0f;
+                        }
+                        else if (current_minutes >= end_minutes)
+                        {
+                            // 晚7點半之後 到 0點為 0
+                            progressValue = 0.0f;
+                        }
+                        else
+                        {
+                            // 在區間內，計算當前時間距離晚上 19:30 的剩餘時間比例
+                            float total_duration = (float)(end_minutes - start_minutes);
+                            float remaining_time = (float)(end_minutes - current_minutes);
+                            progressValue = remaining_time / total_duration;
+                        }
+                    }
+
                     // 3. 計算進度條在標題列底部的邊界座標
                     // 我們把它設計成緊貼在標題列最底端的一條細線（高約 2~3 像素），這樣最精緻且不擋文字
                     int midx = winPos.x + winWidth / 2;
                     int midy = barHeight / 2 + winPos.y;
-                    ImVec2 barMin = ImVec2(midx - 50, midy - 5);
-                    ImVec2 barMax = ImVec2(midx + 50, midy + 5);
+                    ImVec2 barMin = ImVec2(midx - 50, midy - 6);
+                    ImVec2 barMax = ImVec2(midx + 50, midy + 7);
 
                     // 4. 繪製進度條背景（淡淡的灰色或深色細條）
                     drawList->AddRectFilled(barMin, barMax, IM_COL32(160, 160, 160, 100));
@@ -300,14 +325,64 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
                     if (progressValue > 0.0f)
                     {
+                        static std::vector<ImColor> arrClr = { IMCLR("#3282F6"),
+                            IMCLR("#22B14C"),  IMCLR("#22B14C"),  IMCLR("#F5E800"),  IMCLR("#F77B26"),  IMCLR("#DE1A22"),
+                            IMCLR("#3282F6") };
+                        ImColor c = arrClr[tm_now.tm_wday];
                         // 🟢 傳入參數改為 progressMin（新起點）到 barMax（右終點）
-                        drawList->AddRectFilled(progressMin, barMax, IM_COL32(0, 162, 232, 255), 1.5f);
+                        drawList->AddRectFilled(progressMin, barMax, c);
                     }
                     barMin.x -= 1; barMin.y -= 1;
                     drawList->AddLine(barMin, ImVec2(barMax.x + 1, barMin.y), IM_COL32(30, 30, 30, 200));
                     drawList->AddLine(barMin, ImVec2(barMin.x, barMax.y + 1), IM_COL32(30, 30, 30, 200));
                     drawList->AddLine(ImVec2(barMin.x + 1, barMax.y), barMax, IM_COL32(220, 220, 220, 200));
                     drawList->AddLine(ImVec2(barMax.x, barMin.y + 1), ImVec2(barMax.x, barMax.y + 1), IM_COL32(220, 220, 220, 200));
+
+#if 0
+                    // 🔴 核心修改：當進度為 0 時，每幀移動一像素繞圈
+                    if((int)progressValue <= 0)
+                    {
+                        float innerWidth = barMax.x - barMin.x - 1;
+                        float innerHeight = barMax.y - barMin.y - 1;
+                        float totalPerimeter = (innerWidth + innerHeight) * 2.0f; // 總周長
+
+                        // 使用 static 靜態變數記錄位置，每幀固定 +1.0f 像素
+                        static float currentDistance = 0.0f;
+                        currentDistance += 1.0f;
+                        if (currentDistance >= totalPerimeter)
+                        {
+                            currentDistance -= totalPerimeter; // 超過總周長時歸零重新循環
+                        }
+
+                        ImVec2 pixelPos;
+
+                        // 順時針繞圈邏輯判定：
+                        if (currentDistance < innerWidth) // 1. 上邊：從左往右
+                        {
+                            pixelPos.x = barMin.x + currentDistance;
+                            pixelPos.y = barMin.y;
+                        }
+                        else if (currentDistance < innerWidth + innerHeight) // 2. 右邊：從上往下
+                        {
+                            pixelPos.x = barMax.x;
+                            pixelPos.y = barMin.y + (currentDistance - innerWidth);
+                        }
+                        else if (currentDistance < innerWidth * 2.0f + innerHeight) // 3. 下邊：從右往左
+                        {
+                            pixelPos.x = barMax.x - (currentDistance - (innerWidth + innerHeight));
+                            pixelPos.y = barMax.y;
+                        }
+                        else // 4. 左邊：從下往上
+                        {
+                            pixelPos.x = barMin.x;
+                            pixelPos.y = barMax.y - (currentDistance - (innerWidth * 2.0f + innerHeight));
+                        }
+
+                        // 貼著內壁繪製精準的 1 像素紅點
+                        drawList->AddRectFilled(pixelPos, ImVec2(pixelPos.x + 1.0f, pixelPos.y + 1.0f), IM_COL32(255, 0, 0, 255));
+                    }
+#endif
+
                 }
 
                 ImDrawList* drawList = ImGui::GetForegroundDrawList();
