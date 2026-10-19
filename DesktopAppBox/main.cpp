@@ -326,7 +326,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     if (progressValue > 0.0f)
                     {
                         static std::vector<ImColor> arrClr = { IMCLR("#3282F6"),
-                            IMCLR("#22B14C"),  IMCLR("#22B14C"),  IMCLR("#F5E800"),  IMCLR("#F77B26"),  IMCLR("#DE1A22"),
+                            IMCLR("#00A2E8"),  IMCLR("#22B14C"),  IMCLR("#F5E800"),  IMCLR("#F77B26"),  IMCLR("#D41920"),
                             IMCLR("#3282F6") };
                         ImColor c = arrClr[tm_now.tm_wday];
                         // 🟢 傳入參數改為 progressMin（新起點）到 barMax（右終點）
