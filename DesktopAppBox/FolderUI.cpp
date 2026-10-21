@@ -187,7 +187,7 @@ namespace
             if (pSlash)
             {
                 std::wstring workDir(app.exePathBuf, pSlash - app.exePathBuf);
-                ShellExecuteW(hwnd, L"open", app.exePathBuf, pArgs, workDir.c_str(), SW_SHOW);
+                ShellExecuteW(hwnd, L"open", app.sLnkPath.c_str(), pArgs, workDir.c_str(), SW_SHOW);
             }
             else
             {

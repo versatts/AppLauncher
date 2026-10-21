@@ -130,7 +130,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName,
         L"-AppBox-",
-        WS_POPUP | WS_CLIPCHILDREN,
+        WS_POPUP/* | WS_CLIPCHILDREN*/,
         0, 0, w, h,
         nullptr, nullptr, wc.hInstance, nullptr
     );
@@ -218,7 +218,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         {
             static bool show_close_confirmation = false;
 
-            // 每幀將 Win32 宿主視窗同步貼合到 ImGui 主視窗的位置
+            // 每幀將 Win32 宿主視窗同步貼合到 ImGui 主視窗的位置（優化副屏閃爍）
             {
                 ImGuiWindow* imguiWin = ImGui::FindWindowByName("###-AppBox-");
                 if (imguiWin)
@@ -226,22 +226,26 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     ImVec2 ipos = (imguiWin->Viewport != nullptr) ? imguiWin->Viewport->Pos : imguiWin->Pos;
                     ImVec2 isz = imguiWin->Size;
 
-                    int targetX = (int)std::floor(ipos.x);
-                    int targetY = (int)std::floor(ipos.y);
-                    int targetW = isz.x > 0 ? (int)std::floor(isz.x) : w;
-                    int targetH = isz.y > 0 ? (int)std::floor(isz.y) : h;
+                    // 🟢 使用 round 代替 floor，避免負數座標或 DPI 縮放帶來的邊界計算誤差
+                    int targetX = (int)std::round(ipos.x);
+                    int targetY = (int)std::round(ipos.y);
+                    int targetW = isz.x > 0 ? (int)std::round(isz.x) : w;
+                    int targetH = isz.y > 0 ? (int)std::round(isz.y) : h;
 
                     static int lastX = INT_MIN, lastY = INT_MIN, lastW = INT_MIN, lastH = INT_MIN;
-                    if (lastX != targetX || lastY != targetY || lastW != targetW || lastH != targetH)
+
+                    // 🟢 只有當位移大於 1 像素時才觸發 SetWindowPos，防止在副屏 DPI 邊界上來回抖動
+                    if (std::abs(lastX - targetX) > 1 || std::abs(lastY - targetY) > 1 ||
+                        std::abs(lastW - targetW) > 1 || std::abs(lastH - targetH) > 1)
                     {
                         lastX = targetX; lastY = targetY; lastW = targetW; lastH = targetH;
 
-                        ::SetWindowPos(hwnd, HWND_BOTTOM, targetX, targetY, targetW, targetH,
-                            SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+                        // 🟢 加入 SWP_NOREDRAW 標誌，避免 Win32 系統重複觸發無效的視窗擦除，減少閃爍
+                        ::SetWindowPos(hwnd, NULL, targetX, targetY, targetW, targetH,
+                            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOREDRAW);
                     }
                 }
             }
-
             ImGuiWindowFlags win_flags = 0;
             win_flags |= ImGuiWindowFlags_NoDocking;
 
@@ -279,35 +283,41 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     float topPadding = ImGui::GetStyle().FramePadding.y;
                     float barHeight = ImGui::GetFontSize() + topPadding * 2;
 
-                    // 2. 這裡設定你想要的進度數值（0.0f 到 1.0f 之間）
-                    // 💡 實際應用時，你可以把這個變數改成你全域的下載或讀取進度
-                    float progressValue = 1.0f;
-                    // 🚀 實作時間比例計算：
+                    // 🟢 宣告靜態快取變數，用來鎖定 10 分鐘內的數值
+                    static float progressValue = 1.0f;
+                    static ImColor cached_color = IMCLR("#3282F6");
+                    static int last_10min_block = -1; // 用來記錄上一次是在哪一個「10分鐘區塊」
+
+                    // 將時間統一轉換為當天的「分鐘數」以便計算
+                    int current_minutes = tm_now.tm_hour * 60 + tm_now.tm_min;
+
+                    // 🟢 計算當前屬於第幾個 10 分鐘區塊 (例如 8:32 是第 51 塊，8:39 也是第 51 塊)
+                    int current_10min_block = current_minutes / 10;
+
+                    // 🟢 只有當跨入新的 10 分鐘區塊時，才重新計算 progressValue 與顏色
+                    if (current_10min_block != last_10min_block)
                     {
-                        // 將時間統一轉換為當天的「分鐘數」以便計算
-                        int current_minutes = tm_now.tm_hour * 60 + tm_now.tm_min;
+                        last_10min_block = current_10min_block;
+
                         int start_minutes = 8 * 60 + 30;   // 08:30 -> 510 分鐘
                         int end_minutes = 19 * 60 + 30;   // 19:30 -> 1170 分鐘
-                        //end_minutes = 12 * 60;
+
                         if (current_minutes < start_minutes)
                         {
-                            // 0點 到 8點半時為 1
                             progressValue = 1.0f;
                         }
                         else if (current_minutes >= end_minutes)
                         {
-                            // 晚7點半之後 到 0點為 0
                             progressValue = 0.0f;
                         }
                         else
                         {
-                            // 在區間內，計算當前時間距離晚上 19:30 的剩餘時間比例
+                            // 在區間內，計算當前時間（已鎖定在 10 分鐘階梯）距離晚上 19:30 的剩餘時間比例
                             float total_duration = (float)(end_minutes - start_minutes);
                             float remaining_time = (float)(end_minutes - current_minutes);
                             progressValue = remaining_time / total_duration;
                         }
                     }
-
                     // 3. 計算進度條在標題列底部的邊界座標
                     // 我們把它設計成緊貼在標題列最底端的一條細線（高約 2~3 像素），這樣最精緻且不擋文字
                     int midx = winPos.x + winWidth / 2;
@@ -337,51 +347,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     drawList->AddLine(barMin, ImVec2(barMin.x, barMax.y + 1), IM_COL32(30, 30, 30, 200));
                     drawList->AddLine(ImVec2(barMin.x + 1, barMax.y), barMax, IM_COL32(220, 220, 220, 200));
                     drawList->AddLine(ImVec2(barMax.x, barMin.y + 1), ImVec2(barMax.x, barMax.y + 1), IM_COL32(220, 220, 220, 200));
-
-#if 0
-                    // 🔴 核心修改：當進度為 0 時，每幀移動一像素繞圈
-                    if((int)progressValue <= 0)
-                    {
-                        float innerWidth = barMax.x - barMin.x - 1;
-                        float innerHeight = barMax.y - barMin.y - 1;
-                        float totalPerimeter = (innerWidth + innerHeight) * 2.0f; // 總周長
-
-                        // 使用 static 靜態變數記錄位置，每幀固定 +1.0f 像素
-                        static float currentDistance = 0.0f;
-                        currentDistance += 1.0f;
-                        if (currentDistance >= totalPerimeter)
-                        {
-                            currentDistance -= totalPerimeter; // 超過總周長時歸零重新循環
-                        }
-
-                        ImVec2 pixelPos;
-
-                        // 順時針繞圈邏輯判定：
-                        if (currentDistance < innerWidth) // 1. 上邊：從左往右
-                        {
-                            pixelPos.x = barMin.x + currentDistance;
-                            pixelPos.y = barMin.y;
-                        }
-                        else if (currentDistance < innerWidth + innerHeight) // 2. 右邊：從上往下
-                        {
-                            pixelPos.x = barMax.x;
-                            pixelPos.y = barMin.y + (currentDistance - innerWidth);
-                        }
-                        else if (currentDistance < innerWidth * 2.0f + innerHeight) // 3. 下邊：從右往左
-                        {
-                            pixelPos.x = barMax.x - (currentDistance - (innerWidth + innerHeight));
-                            pixelPos.y = barMax.y;
-                        }
-                        else // 4. 左邊：從下往上
-                        {
-                            pixelPos.x = barMin.x;
-                            pixelPos.y = barMax.y - (currentDistance - (innerWidth * 2.0f + innerHeight));
-                        }
-
-                        // 貼著內壁繪製精準的 1 像素紅點
-                        drawList->AddRectFilled(pixelPos, ImVec2(pixelPos.x + 1.0f, pixelPos.y + 1.0f), IM_COL32(255, 0, 0, 255));
-                    }
-#endif
 
                 }
 
@@ -466,7 +431,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             }
         }
 #endif
-        HRESULT hr = g_pSwapChain->Present(3, 0);
+        HRESULT hr = g_pSwapChain->Present(1, 0);
         g_SwapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
         if (g_pendingReloadIdx != -1)
         {
