@@ -360,14 +360,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
                 {
  //                 ImGui::PushFont(theApp.g_TitleTimeFont);
+                    ImU32 color = IMU32("#FaFaFa");
                     ImVec2 textSize = ImGui::CalcTextSize(timeStr0.c_str());
                     float rightMargin = bOpen ? titleHeight : ImGui::GetStyle().FramePadding.y;
                     ImVec2 textPos;
                     textPos.x = winPos.x + winWidth - textSize.x - rightMargin;
                     textPos.y = winPos.y + (titleHeight - textSize.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
-                    drawList->AddText(textPos, IM_COL32(233, 233, 233, 255), timeStr.c_str());
+                    textPos.y -= 2;//L_TODO
+                    drawList->AddText(textPos, color, timeStr.c_str());
                     ImVec2 leftTextPos(winPos.x + titleHeight, textPos.y);
-                    drawList->AddText(leftTextPos, IM_COL32(233, 233, 233, 255), "AppBox");
+                    drawList->AddText(leftTextPos, color, "AppBox");
   //                  ImGui::PopFont();
                 }
 

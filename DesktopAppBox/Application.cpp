@@ -226,7 +226,7 @@ void Application::InitImGuiContext(float fScale)
     }
 
     // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
-    float fontSize = 18;
+    float fontSize = 20;
 
     ImFontConfig cfg;
     cfg.OversampleH = 2;

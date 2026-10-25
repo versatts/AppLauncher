@@ -1,5 +1,11 @@
 #include "ImGuiObj.h"
 
+ImU32 ImGuiObj::ToImU32(const std::string& hexStr, float alpha)
+{
+    ImVec4 c = ToImVec4(hexStr, alpha);
+    return ImGui::ColorConvertFloat4ToU32(c);
+}
+
 ImColor ImGuiObj::ToImClr(const std::string& hexStr)
 {
     // 移除可能存在的 '#' 前缀
