@@ -260,7 +260,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 localtime_s(&tm_now, &time_now);
                 char timeBuffer[64];
                 //std::strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d (%a) %H:%M:%S", &tm_now);
-                std::strftime(timeBuffer, sizeof(timeBuffer), "(%a) %H:%M:%S", &tm_now);
+                //static std::string arrWeek[7] = {"⑦", "①", "②", "③", "④", "⑤", "⑥"};
+                static std::string arrWeek[7] = {u8"周日", u8"周一", u8"周二", u8"周三", u8"周四", u8"周五", u8"周六"};
+                std::strftime(timeBuffer, sizeof(timeBuffer), "%H:%M:%S", &tm_now);
+                std::string timeStr = arrWeek[tm_now.tm_wday] + " - " + timeBuffer;
+                std::string timeStr0 = arrWeek[tm_now.tm_wday] + " - 88:88:88";
 
                 // 🎯 核心修正：如果確認關閉的彈窗正在顯示，將整個主視窗的元件狀態切換為「停用（Disabled）」
                 // 這會讓 ImGui 自動在底層切斷該視窗內的所有滑鼠幾何判定、單擊、雙擊與拖拽
@@ -272,17 +276,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
                 ImGui::Begin("###-AppBox-", &bOpen, win_flags);
 
+                // 1. 取得進度條需要的所有幾何資訊
+                ImDrawList* drawList = ImGui::GetForegroundDrawList(); // 使用 Foreground 確保進度條不會被主視窗內容遮擋
+                ImVec2 winPos = ImGui::GetWindowPos();
+                float winWidth = ImGui::GetWindowWidth();
+                float topPadding = ImGui::GetStyle().FramePadding.y;
+                float titleHeight = ImGui::GetFontSize() + topPadding * 2;
+
                 // ============================================================
                 // 🚀 核心新增：在標題列上繪製自訂進度條
                 // ============================================================
                 {
-                    // 1. 取得進度條需要的所有幾何資訊
-                    ImDrawList* drawList = ImGui::GetForegroundDrawList(); // 使用 Foreground 確保進度條不會被主視窗內容遮擋
-                    ImVec2 winPos = ImGui::GetWindowPos();
-                    float winWidth = ImGui::GetWindowWidth();
-                    float topPadding = ImGui::GetStyle().FramePadding.y;
-                    float barHeight = ImGui::GetFontSize() + topPadding * 2;
-
                     // 🟢 宣告靜態快取變數，用來鎖定 10 分鐘內的數值
                     static float progressValue = 1.0f;
                     static ImColor cached_color = IMCLR("#3282F6");
@@ -321,9 +325,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     // 3. 計算進度條在標題列底部的邊界座標
                     // 我們把它設計成緊貼在標題列最底端的一條細線（高約 2~3 像素），這樣最精緻且不擋文字
                     int midx = winPos.x + winWidth / 2;
-                    int midy = barHeight / 2 + winPos.y;
-                    ImVec2 barMin = ImVec2(midx - 50, midy - 6);
-                    ImVec2 barMax = ImVec2(midx + 50, midy + 7);
+                    int midy = titleHeight / 2 + winPos.y;
+                    const int barHalfLen = 50;
+                    ImVec2 barMin = ImVec2(midx - barHalfLen, midy - 6);
+                    ImVec2 barMax = ImVec2(midx + barHalfLen, midy + 7);
+
+                //  barMin.x += (winWidth / 2 - barHalfLen - titleHeight);
+                //  barMax.x += (winWidth / 2 - barHalfLen - titleHeight);
 
                     // 4. 繪製進度條背景（淡淡的灰色或深色細條）
                     drawList->AddRectFilled(barMin, barMax, IM_COL32(160, 160, 160, 100));
@@ -350,20 +358,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
                 }
 
-                ImDrawList* drawList = ImGui::GetForegroundDrawList();
-                ImVec2 winPos = ImGui::GetWindowPos();
-                float winWidth = ImGui::GetWindowWidth();
-                float titleBarHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
-                ImGui::PushFont(theApp.g_TitleTimeFont);
-                ImVec2 textSize = ImGui::CalcTextSize(timeBuffer);
-                float rightMargin = bOpen ? 45.0f : 15.0f;
-                ImVec2 textPos;
-                textPos.x = winPos.x + winWidth - textSize.x - rightMargin;
-                textPos.y = winPos.y + (titleBarHeight - textSize.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
-                drawList->AddText(textPos, IM_COL32(233, 233, 233, 255), timeBuffer);
-                ImVec2 leftTextPos(winPos.x + titleBarHeight, textPos.y);
-                drawList->AddText(leftTextPos, IM_COL32(233, 233, 233, 255), "-AppBox-");
-                ImGui::PopFont();
+                {
+ //                 ImGui::PushFont(theApp.g_TitleTimeFont);
+                    ImVec2 textSize = ImGui::CalcTextSize(timeStr0.c_str());
+                    float rightMargin = bOpen ? titleHeight : ImGui::GetStyle().FramePadding.y;
+                    ImVec2 textPos;
+                    textPos.x = winPos.x + winWidth - textSize.x - rightMargin;
+                    textPos.y = winPos.y + (titleHeight - textSize.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
+                    drawList->AddText(textPos, IM_COL32(233, 233, 233, 255), timeStr.c_str());
+                    ImVec2 leftTextPos(winPos.x + titleHeight, textPos.y);
+                    drawList->AddText(leftTextPos, IM_COL32(233, 233, 233, 255), "AppBox");
+  //                  ImGui::PopFont();
+                }
 
                 isCollapsed = ImGui::IsWindowCollapsed();
                 if (!isCollapsed)

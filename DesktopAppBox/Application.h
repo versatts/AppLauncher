@@ -12,7 +12,7 @@ public:
 	bool                     g_SwapChainOccluded = false;
 	//UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
 	ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
-	ImFont* g_TitleTimeFont = nullptr;
+	//ImFont* g_TitleTimeFont = nullptr;
 
 
 

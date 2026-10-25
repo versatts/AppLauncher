@@ -226,28 +226,51 @@ void Application::InitImGuiContext(float fScale)
     }
 
     // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
+    float fontSize = 18;
+
     ImFontConfig cfg;
     cfg.OversampleH = 2;
     cfg.OversampleV = 2;
     cfg.PixelSnapH = true;
+    ImFont* fontDefault = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\ARIALNB.ttf", fontSize, &cfg);
 
-    // 清除或不要呼叫 AddFontDefaultVector / Bitmap
-    ImFont* fontYaHei = io.Fonts->AddFontFromFileTTF(
-        "C:\\Windows\\Fonts\\msyhbd.ttc",
-        18.0f,
-        &cfg,
-        io.Fonts->GetGlyphRangesChineseFull() // 載入完整中文
-    );
+    ImFontConfig cfg1;
+    cfg1.OversampleH = 2;
+    cfg1.OversampleV = 2;
+    cfg1.MergeMode = true; 
+    cfg1.PixelSnapH = true;
+    cfg1.GlyphOffset.y = -1.f;
+    io.Fonts->AddFontFromFileTTF( "C:\\Windows\\Fonts\\msyhbd.ttc", fontSize, &cfg1, io.Fonts->GetGlyphRangesChineseFull());
 
-    if (fontYaHei != nullptr) {
-        io.FontDefault = fontYaHei; // 設置全局預設字體
+    if (fontDefault != nullptr) {
+        io.FontDefault = fontDefault; // 設置全局預設字體
     }
     else {
         // 如果加載失敗的防禦方案：使用系統預設
         io.Fonts->AddFontDefault();
     }
 
-    g_TitleTimeFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consolab.ttf", 16.0f);
+#if 0
+    {
+        float fontSize = 40;
+        // 1. 定義允許顯示的 Unicode 範圍 (必須以 0 結尾)
+        static const ImWchar my_ranges[] = {
+            0x0020, 0x00FF, // 基礎英文與數字
+            0x4E00, 0x9FFF, // 常用中文字 (為了顯示 "周日")
+            0x2400, 0x24FF, // 👈 關鍵：包含 ①②③④⑤⑥ 的 Unicode 區段
+            0
+        };
+        g_TitleTimeFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\courbd.ttf", fontSize, NULL, my_ranges);
+        // 3. 關鍵：設定合併組態
+        ImFontConfig config;
+        config.MergeMode = true;  // 👈 啟動合併模式，將下一個字型疊加到 g_TitleTimeFont
+        config.PixelSnapH = true;
+
+        // 4. 載入支援中文與帶圈數字的系統字型 (這裡使用微軟正黑體)
+        // ImGui 會自動用它來填補 courbd.ttf 裡面沒有的「周日」和「①②③」
+        io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\msyhbd.ttc", fontSize, &config, my_ranges);
+    }
+#endif
 
     //  io.Fonts->Build();
 }
