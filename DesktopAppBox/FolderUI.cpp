@@ -60,68 +60,43 @@ void MoveAppElement(std::vector<ST_APP>& vApp, int fromIndex, int toIndex)
     vApp.insert(vApp.begin() + toIndex, std::move(targetApp));
 }
 
-namespace
-{
-    // ============================================================
-    // 網格排版參數與幾何計算結果
-    // ============================================================
-    struct GridLayout
-    {
-        // 基礎參數
-        ImVec2 iconSize        = ImVec2(64.0f, 64.0f);
-        float  itemSpacingX    = 4.0f;   // 圖標之間固定的橫向間距
-        float  itemSpacingY    = 4.0f;  // 圖標單元之間的縱向間距
-        float  textBlockHeight = 20.0f;  // 文字塊的固定高度
-        float  textGap         = 4.0f;   // 圖標與下方文字塊之間的微小間距
-        float  sidePadding      = 5.0f;  // 左右最小 Padding
-        float  topPadding      = 5.0f;   // 上邊沿固定的 Padding
-
-        // 計算結果
-        bool   bShowText       = true;
-        ImVec2 btnSize;
-        float  totalCellHeight = 0.0f;   // 單個單元（含文字塊）總高
-        float  dynamicPadding  = 0.0f;   // 水平置中 Padding
-        int    maxItemsPerRow  = 1;
-        ImVec2 startPos        = ImVec2(0.0f, 0.0f); // 內容繪製起始位置（已含 topPadding）
-    };
-
-    int btnPadding = 6;
+    
     // 依當前子視窗寬度與項目數量，計算換行與置中所需的全部幾何
-    GridLayout CalcGridLayout(bool bShowText, size_t itemCount)
+GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
+{
+    ImGuiStyle& style = ImGui::GetStyle();
+
+    GridLayout g;
+    g.bShowText = bShowText;
+    float w = g.iconSize.x + btnPadding * 2.0f;
+    float h = g.iconSize.y + btnPadding * 2.0f;
+    g.btnSize.x = w;
+    g.btnSize.y = h;
+    g.totalCellHeight = h;
+    if (bShowText)
     {
-        ImGuiStyle& style = ImGui::GetStyle();
-
-        GridLayout g;
-        g.bShowText = bShowText;
-        float w = g.iconSize.x + btnPadding * 2.0f;
-        float h = g.iconSize.y + btnPadding * 2.0f;
-        g.btnSize.x = w;
-        g.btnSize.y = h;
-        g.totalCellHeight = h;
-        if (bShowText)
-        {
-            g.totalCellHeight = h + g.textGap + g.textBlockHeight;
-        }
-
-        // 💡 穩定寬度：GetContentRegionAvail().x 是動態值（滾動條出現時自動扣減），
-        //    這裡改用子視窗自身總寬 GetWindowSize().x（恆定，滾動條僅懸浮不佔位）
-        float windowWidth = ImGui::GetWindowSize().x;
-        float oneItemW = w + 2 * g.itemSpacingX;
-        g.maxItemsPerRow = (int)((windowWidth - 2 * g.sidePadding) / oneItemW);
-        if (g.maxItemsPerRow < 1) g.maxItemsPerRow = 1;
-
-        float totalItemsWidth = g.maxItemsPerRow * oneItemW;
-
-        g.dynamicPadding = (windowWidth - totalItemsWidth) / 2.0f;
-
-        // 💡 先套用頂部間距，避免內容黏在子視窗最上緣
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + g.topPadding);
-        g.startPos = ImGui::GetCursorPos();
-        return g;
+        g.totalCellHeight = h + g.textGap + g.textBlockHeight;
     }
 
+    // 💡 穩定寬度：GetContentRegionAvail().x 是動態值（滾動條出現時自動扣減），
+    //    這裡改用子視窗自身總寬 GetWindowSize().x（恆定，滾動條僅懸浮不佔位）
+    float windowWidth = ImGui::GetWindowSize().x;
+    float oneItemW = w + 2 * g.itemSpacingX;
+    g.maxItemsPerRow = (int)((windowWidth - 2 * g.sidePadding) / oneItemW);
+    if (g.maxItemsPerRow < 1) g.maxItemsPerRow = 1;
+
+    float totalItemsWidth = g.maxItemsPerRow * oneItemW;
+
+    g.dynamicPadding = (windowWidth - totalItemsWidth) / 2.0f;
+
+    // 💡 先套用頂部間距，避免內容黏在子視窗最上緣
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + g.topPadding);
+    g.startPos = ImGui::GetCursorPos();
+    return g;
+}
+
     // UTF-8 安全截斷：超出 maxWidth 時保留完整多位元組字元並補 "..."
-    std::string TruncateUtf8WithEllipsis(const std::string& text, float maxWidth)
+    std::string FolderUI::TruncateUtf8WithEllipsis(const std::string& text, float maxWidth)
     {
         const std::string ellipsis = "...";
         float ellipsisWidth = ImGui::CalcTextSize(ellipsis.c_str()).x;
@@ -158,20 +133,11 @@ namespace
         return result + ellipsis;
     }
 
-    // ============================================================
-    // 🚀 拖出狀態機：拖著項目離開視窗外後進入「待確認移除」狀態
-    //    - 在視窗外鬆開滑鼠 → 直接刪除 lnk 檔案（不拖放到任何目錄）
-    //    - 拖回視窗內鬆開 → 視為普通排序，移動到鬆開點所在格子
-    //    - 按 ESC → 取消
-    // ============================================================
-    bool s_dragOutArmed = false;
-    int  s_dragOutFromIdx = -1;
-    std::wstring s_dragOutLnkPath;
 
     // ============================================================
     // 單個 App 項目：圖標按鈕 + 點擊啟動 + 拖曳排序
     // ============================================================
-    void RenderAppButton(HWND hwnd, const ST_APP& app, const char* btnId, size_t itemIdx,
+    void FolderUI::RenderAppButton(HWND hwnd, const ST_APP& app, const char* btnId, size_t itemIdx,
                          ImVec2 iconSize, int padding, int& moveFrom, int& moveTo)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padding, padding));
@@ -250,7 +216,7 @@ namespace
     // 🚀 雙擊文字塊改名：把新名稱寫回磁碟（自動保留 "NNNN-" 排序前綴）
     //    同名覆蓋圖標（.png/.ico）跟著一起改名，並同步更新記憶體
     // ============================================================
-    void ApplyItemRename(ST_APP& app, const char* newNameUtf8)
+    void FolderUI::ApplyItemRename(ST_APP& app, const char* newNameUtf8)
     {
         if (!newNameUtf8 || newNameUtf8[0] == '\0') return; // 空：視為取消（含 ESC 清空）
         if (app.sLnkPath.empty()) return;
@@ -303,7 +269,7 @@ namespace
         app.sDisplay = newNameUtf8;
     }
 
-    void DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g)
+    void FolderUI::DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g)
     {
         // 懸停滾動狀態（同一時間只有一個項被懸停，單份狀態即可）
         // s_hoverIdx: 當前懸停的項目索引；s_hoverStartTime: 該項目開始懸停的時刻
@@ -457,7 +423,7 @@ namespace
     // ============================================================
     // 懸停 Tooltip：顯示啟動目標路徑
     // ============================================================
-    void DrawItemTooltip(const ST_APP& app, const GridLayout& g)
+    void FolderUI::DrawItemTooltip(const ST_APP& app, const GridLayout& g)
     {
         float hoverHeightOffset = g.bShowText ? (g.textGap + g.textBlockHeight) : 0.0f;
         ImVec2 maxHoverPos = ImVec2(ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y + hoverHeightOffset);
@@ -470,8 +436,6 @@ namespace
             }
         }
     }
-} // namespace
-
 // ============================================================
 // 主渲染流程：換行排版 -> 逐項繪製（按鈕 / 文字塊 / Tooltip）-> 拖曳套用
 // ============================================================
@@ -561,8 +525,8 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 
             // 計算當前單元的絕對 X 與 Y 座標
             // X 用視窗座標（dynamicPadding 已是按鈕塊左緣的視窗座標，絕對居中）
-            float targetX = g.dynamicPadding + (col * (g.btnSize.x + 2 * g.itemSpacingX));
-            float targetY = g.startPos.y + (row * (g.totalCellHeight + g.itemSpacingY));
+            float targetX = g.dynamicPadding + (col * (g.btnSize.x + g.itemSpacingX * 2));
+            float targetY = g.startPos.y + (row * (g.totalCellHeight + g.itemSpacingY * 2));
 
             // 更新最後一行涵蓋的最大高度
             if (targetY + g.totalCellHeight > maxCalculatedY) {
@@ -599,7 +563,10 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
                 DrawTextBlock(a, i, g);
             }
 
-            DrawItemTooltip(a, g);
+            if (m_bShowTip)
+            {
+                DrawItemTooltip(a, g);
+            }
         }
 
         if (moveFrom != -1 && moveTo != -1)

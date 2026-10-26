@@ -232,7 +232,7 @@ void Application::InitImGuiContext(float fScale)
     cfg.OversampleH = 2;
     cfg.OversampleV = 2;
     cfg.PixelSnapH = true;
-    ImFont* fontDefault = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\ARIALNB.ttf", fontSize, &cfg);
+    ImFont* fontDefault = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\BRITANIC.ttf", fontSize, &cfg);
 
     ImFontConfig cfg1;
     cfg1.OversampleH = 2;
