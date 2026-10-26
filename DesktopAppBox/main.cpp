@@ -63,6 +63,8 @@ static constexpr int DEFAULT_IMGUI_H = 400;
 
 void ShowCloseConfDlg(bool& show_close_confirmation)
 {
+    // 1. 確保 OpenPopup 與 BeginPopupModal 使用完全相同的識別碼 "ExitConfirmation"
+    static std::string sTitle = u8"提示";
     if (show_close_confirmation)
     {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -72,37 +74,40 @@ void ShowCloseConfDlg(bool& show_close_confirmation)
         );
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        ImGui::OpenPopup("ExitConfirmation");
+        ImGui::OpenPopup(sTitle.c_str());
+        show_close_confirmation = false; // 觸發後立即重設
     }
-    if (ImGui::BeginPopupModal("ExitConfirmation", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+
+    // 2. 這裡的識別碼必須與 OpenPopup 一致
+    if (ImGui::BeginPopupModal(sTitle.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("確定要關閉程式嗎？");
         ImGui::Separator();
+
         float button_width = ImGui::GetFontSize() * 5.0f;
+
         if (ImGui::Button("確定", ImVec2(button_width, 0)))
         {
             ImGui::CloseCurrentPopup();
-            show_close_confirmation = false;
             ::PostMessage(g_hwnd, WM_CLOSE, 0, 0);
         }
+
         ImGui::SameLine();
-        if (ImGui::Button("重启", ImVec2(button_width, 0)))
+        if (ImGui::Button("重啟", ImVec2(button_width, 0))) // 統一為繁體
         {
             ImGui::CloseCurrentPopup();
-            show_close_confirmation = false;
-            ::PostMessage(g_hwnd, WM_CLOSE, 1, 0);
+            ::PostMessage(g_hwnd, WM_CLOSE, 1, 0); // WndProc 中需處理 wParam == 1 的邏輯
         }
+
         ImGui::SameLine();
         if (ImGui::Button("取消", ImVec2(button_width, 0)))
         {
             ImGui::CloseCurrentPopup();
-            show_close_confirmation = false;
         }
 
         ImGui::EndPopup();
     }
 }
-
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
