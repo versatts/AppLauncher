@@ -226,22 +226,25 @@ void Application::InitImGuiContext(float fScale)
     }
 
     // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
-    float fontSize = 20;
+    float fontSize = 24;
 
     ImFontConfig cfg;
     cfg.OversampleH = 2;
     cfg.OversampleV = 2;
     cfg.PixelSnapH = true;
-    ImFont* fontDefault = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\BRITANIC.ttf", fontSize, &cfg);
-
+    //ImFont* fontDefault = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\BRITANIC.ttf", fontSize, &cfg);
+    ImFont* fontDefault = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\TCCEB.TTf", fontSize, &cfg);
+    
+    fontSize -= 2;
     ImFontConfig cfg1;
     cfg1.OversampleH = 2;
     cfg1.OversampleV = 2;
     cfg1.MergeMode = true; 
     cfg1.PixelSnapH = true;
     cfg1.GlyphOffset.y = -1.f;
+    //io.Fonts->AddFontFromFileTTF( "C:\\Windows\\Fonts\\STHUPO.TTF", fontSize, &cfg1, io.Fonts->GetGlyphRangesChineseFull());
     io.Fonts->AddFontFromFileTTF( "C:\\Windows\\Fonts\\msyhbd.ttc", fontSize, &cfg1, io.Fonts->GetGlyphRangesChineseFull());
-
+    
     if (fontDefault != nullptr) {
         io.FontDefault = fontDefault; // 設置全局預設字體
     }

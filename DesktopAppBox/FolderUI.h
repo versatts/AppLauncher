@@ -3,6 +3,8 @@
 #include <windows.h>
 #include <vector>
 #include <string>
+
+#define ICON_SIZE 64
 class FolderUIData;
 struct ST_APP;
 
@@ -12,10 +14,10 @@ struct ST_APP;
     struct GridLayout
     {
         // 基礎參數
-        ImVec2 iconSize        = ImVec2(64.0f, 64.0f);
+        ImVec2 iconSize        = ImVec2(ICON_SIZE, ICON_SIZE);
         float  itemSpacingX    = 4.0f;   // 圖標之間固定的橫向間距
         float  itemSpacingY    = 4.0f;  // 圖標單元之間的縱向間距
-        float  textBlockHeight = 20.0f;  // 文字塊的固定高度
+        float  textBlockHeight = 22.0f;  // 文字塊的固定高度
         float  textGap         = 4.0f;   // 圖標與下方文字塊之間的微小間距
         float  sidePadding      = 5.0f;  // 左右最小 Padding
         float  topPadding      = 5.0f;   // 上邊沿固定的 Padding

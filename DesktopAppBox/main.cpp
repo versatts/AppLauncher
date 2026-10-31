@@ -81,19 +81,19 @@ void ShowCloseConfDlg(bool& show_close_confirmation)
     // 2. 這裡的識別碼必須與 OpenPopup 一致
     if (ImGui::BeginPopupModal(sTitle.c_str(), NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text("確定要關閉程式嗎？");
+        ImGui::Text("请确认操作");
         ImGui::Separator();
 
         float button_width = ImGui::GetFontSize() * 5.0f;
 
-        if (ImGui::Button("確定", ImVec2(button_width, 0)))
+        if (ImGui::Button("退出", ImVec2(button_width, 0)))
         {
             ImGui::CloseCurrentPopup();
             ::PostMessage(g_hwnd, WM_CLOSE, 0, 0);
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("重啟", ImVec2(button_width, 0))) // 統一為繁體
+        if (ImGui::Button("重启", ImVec2(button_width, 0))) // 統一為繁體
         {
             ImGui::CloseCurrentPopup();
             ::PostMessage(g_hwnd, WM_CLOSE, 1, 0); // WndProc 中需處理 wParam == 1 的邏輯
@@ -267,9 +267,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 //std::strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d (%a) %H:%M:%S", &tm_now);
                 //static std::string arrWeek[7] = {"⑦", "①", "②", "③", "④", "⑤", "⑥"};
                 static std::string arrWeek[7] = {u8"周日", u8"周一", u8"周二", u8"周三", u8"周四", u8"周五", u8"周六"};
-                std::strftime(timeBuffer, sizeof(timeBuffer), "%H:%M:%S", &tm_now);
-                std::string timeStr = arrWeek[tm_now.tm_wday] + " - " + timeBuffer;
-                std::string timeStr0 = arrWeek[tm_now.tm_wday] + " - 88:88:88";
+                //std::strftime(timeBuffer, sizeof(timeBuffer), "%H:%M:%S", &tm_now);
+                //std::string timeStr = arrWeek[tm_now.tm_wday] + " - " + timeBuffer;
+                std::string timeStr0 = arrWeek[tm_now.tm_wday] + "   ";
+                std::string timeStr1 = "00:00:000";
+                std::string timeStrFull = timeStr0 + timeStr1;
+                const char* sTimeSymbol[] = { "0", ":" };
 
                 // 🎯 核心修正：如果確認關閉的彈窗正在顯示，將整個主視窗的元件狀態切換為「停用（Disabled）」
                 // 這會讓 ImGui 自動在底層切斷該視窗內的所有滑鼠幾何判定、單擊、雙擊與拖拽
@@ -364,15 +367,345 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 }
 
                 {
- //                 ImGui::PushFont(theApp.g_TitleTimeFont);
                     ImU32 color = IMU32("#FaFaFa");
-                    ImVec2 textSize = ImGui::CalcTextSize(timeStr0.c_str());
+                    //                 ImGui::PushFont(theApp.g_TitleTimeFont);
+                    ImVec2 textSizeFull = ImGui::CalcTextSize(timeStrFull.c_str());
+                    ImVec2 textSizeWeek = ImGui::CalcTextSize(timeStr0.c_str());
                     float rightMargin = bOpen ? titleHeight : ImGui::GetStyle().FramePadding.y;
                     ImVec2 textPos;
-                    textPos.x = winPos.x + winWidth - textSize.x - rightMargin;
-                    textPos.y = winPos.y + (titleHeight - textSize.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
+                    textPos.x = winPos.x + winWidth - textSizeFull.x - rightMargin;
+                    textPos.y = winPos.y + (titleHeight - textSizeFull.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
                     textPos.y -= 2;//L_TODO
-                    drawList->AddText(textPos, color, timeStr.c_str());
+
+                    //Draw Week
+                    drawList->AddText(textPos, color, timeStr0.c_str());
+
+                    //Draw Time
+                    {
+                        // 1. 定義支援的動畫類型
+                        enum class TimeAnimType {
+                            SlideDown, // 下滑並淡出，新數字從上滑入
+                            Flip3D     // 3D 翻轉（繞水平軸垂直壓縮）
+                        };
+
+                        // 2. 控制變數：修改這個變數即可一鍵切換動畫效果！
+                        static TimeAnimType animType = TimeAnimType::SlideDown;
+
+                        // 3. 動態狀態結構 (維持 8 個位置)
+                        struct DigitAnimation {
+                            std::string currentStr = "";
+                            std::string oldStr = "";
+                            float progress = 1.0f;
+                        };
+                        static DigitAnimation timeAnims[8];
+                        const float ANIM_DURATION = 0.28f; // 動畫持續時間 (秒)
+
+                        // 1. 每幀動態更新目標字串 (與你原本完全一致)
+                        std::string arrTime[] = { "", "", ":", "", "", ":", "", "" };
+                        arrTime[0] = std::to_string(tm_now.tm_hour / 10);
+                        arrTime[1] = std::to_string(tm_now.tm_hour % 10);
+                        arrTime[3] = std::to_string(tm_now.tm_min / 10);
+                        arrTime[4] = std::to_string(tm_now.tm_min % 10);
+                        arrTime[6] = std::to_string(tm_now.tm_sec / 10);
+                        arrTime[7] = std::to_string(tm_now.tm_sec % 10);
+
+                        // 2. 寬度與高度快取
+                        static ImVec2 symSize0 = ImGui::CalcTextSize(sTimeSymbol[0]);
+                        static ImVec2 symSize1 = ImGui::CalcTextSize(sTimeSymbol[1]);
+                        static float arrTimeLen[] = { symSize0.x, symSize0.x, symSize1.x, symSize0.x, symSize0.x, symSize1.x, symSize0.x, symSize0.x };
+                        const float fontHeight = symSize0.y;
+
+                        // 3. 準備顏色與時間增量
+                        float deltaTime = ImGui::GetIO().DeltaTime;
+                        ImVec4 colVec = ImGui::ColorConvertU32ToFloat4(color);
+
+                        // 4. 標準 8 次排版循環 (無特殊化分支)
+                        textPos.x += textSizeWeek.x;
+                        for (int i = 0; i < 8; i++)
+                        {
+                            DigitAnimation& anim = timeAnims[i];
+
+                            // 偵測該位置字串是否改變
+                            if (arrTime[i] != anim.currentStr)
+                            {
+                                anim.oldStr = anim.currentStr;
+                                anim.currentStr = arrTime[i];
+                                anim.progress = (anim.oldStr.empty()) ? 1.0f : 0.0f; // 首次載入不播動畫
+                            }
+
+                            // 更新動畫進度
+                            if (anim.progress < 1.0f)
+                            {
+                                anim.progress += deltaTime / ANIM_DURATION;
+                                if (anim.progress > 1.0f) anim.progress = 1.0f;
+                            }
+
+                            // 進行複合動畫繪製
+                            if (anim.progress < 1.0f)
+                            {
+                                if (animType == TimeAnimType::SlideDown)
+                                {
+                                    // ==================== 【模式一：下滑動畫】 ====================
+                                    const float MAX_OFFSET = fontHeight * 0.4f;
+
+                                    // 舊數字：淡出，向下移動
+                                    ImU32 colOut = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * (1.0f - anim.progress)));
+                                    drawList->AddText(ImVec2(textPos.x, textPos.y + anim.progress * MAX_OFFSET), colOut, anim.oldStr.c_str());
+
+                                    // 新數字：淡入，從上方滑下
+                                    ImU32 colIn = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * anim.progress));
+                                    drawList->AddText(ImVec2(textPos.x, textPos.y + (anim.progress - 1.0f) * MAX_OFFSET), colIn, anim.currentStr.c_str());
+                                }
+                                else if (animType == TimeAnimType::Flip3D)
+                                {
+                                    // ==================== 【模式二：3D 翻轉動畫】 ====================
+                                    bool isIncoming = (anim.progress >= 0.5f);
+                                    float halfP = isIncoming ? ((anim.progress - 0.5f) * 2.0f) : (anim.progress * 2.0f);
+                                    std::string drawStr = isIncoming ? anim.currentStr : anim.oldStr;
+
+                                    float angleRad = (isIncoming ? (1.0f - halfP) : halfP) * (3.14159265f / 2.0f);
+                                    float scaleY = cosf(angleRad);
+
+                                    if (scaleY > 0.0f && !drawStr.empty())
+                                    {
+                                        int vtx_idx_begin = drawList->VtxBuffer.Size;
+
+                                        // 計算淡入淡出透明度
+                                        float alpha = isIncoming ? halfP : (1.0f - halfP);
+                                        ImU32 fadingColor = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * alpha));
+
+                                        // 先以正常比例畫出文字
+                                        drawList->AddText(textPos, fadingColor, drawStr.c_str());
+                                        int vtx_idx_end = drawList->VtxBuffer.Size;
+
+                                        // 透過頂點操作進行垂直壓縮 (寬度 100% 保持原樣)
+                                        if (vtx_idx_end > vtx_idx_begin)
+                                        {
+                                            float centerY = textPos.y + fontHeight * 0.5f;
+                                            for (int v = vtx_idx_begin; v < vtx_idx_end; v++)
+                                            {
+                                                drawList->VtxBuffer[v].pos.y = centerY + (drawList->VtxBuffer[v].pos.y - centerY) * scaleY;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // ==================== 【靜態或動畫結束】 ====================
+                                drawList->AddText(textPos, color, anim.currentStr.c_str());
+                            }
+
+                            // 移動 X 軸游標 (寬度固定，不論任何動畫都不會抖動)
+                            textPos.x += arrTimeLen[i];
+                        }
+                    }
+#if 0
+#if 1
+                    {
+                        struct DigitAnimation {
+                            std::string currentStr = "";
+                            std::string oldStr = "";
+                            float progress = 1.0f;       // 0.0f -> 1.0f
+                        };
+
+                        static DigitAnimation timeAnims[8];
+                        const float ANIM_DURATION = 0.35f; // 翻轉動畫稍微慢一點（如 0.35 秒）視覺效果更紮實
+
+                        // 1. 每幀動態更新目標字串
+                        std::string arrTime[] = { "", "", ":", "", "", ":", "", "" };
+                        arrTime[0] = std::to_string(tm_now.tm_hour / 10);
+                        arrTime[1] = std::to_string(tm_now.tm_hour % 10);
+                        arrTime[3] = std::to_string(tm_now.tm_min / 10);
+                        arrTime[4] = std::to_string(tm_now.tm_min % 10);
+                        arrTime[6] = std::to_string(tm_now.tm_sec / 10);
+                        arrTime[7] = std::to_string(tm_now.tm_sec % 10);
+
+                        // 2. 寬度與高度快取
+                        static ImVec2 symSize0 = ImGui::CalcTextSize(sTimeSymbol[0]);
+                        static ImVec2 symSize1 = ImGui::CalcTextSize(sTimeSymbol[1]);
+                        static float arrTimeLen[] = { symSize0.x, symSize0.x, symSize1.x, symSize0.x, symSize0.x, symSize1.x, symSize0.x, symSize0.x };
+                        const float fontHeight = symSize0.y;
+
+                        // 3. 準備顏色與時間增量
+                        float deltaTime = ImGui::GetIO().DeltaTime;
+                        ImVec4 colVec = ImGui::ColorConvertU32ToFloat4(color);
+
+                        // 輔助 Lambda：透過動態修改頂點 Y 座標，實現真正的 3D 垂直壓縮（寬度保持不變）
+                        auto drawFlipChar = [&](ImVec2 basePos, const std::string& str, float progressHalf, bool isIncoming, float cellWidth) {
+                            if (str.empty()) return;
+
+                            // 計算虛擬 3D 旋轉角度：前半段 0~90 度，後半段 90~0 度
+                            float angleRad = (isIncoming ? (1.0f - progressHalf) : progressHalf) * (3.14159265f / 2.0f);
+                            float scaleY = cosf(angleRad); // 垂直方向縮放比率
+
+                            if (scaleY <= 0.0f) return;
+
+                            // 紀錄繪製前的頂點數量，以便等一下只修改這串字串的頂點
+                            int vtx_idx_begin = drawList->VtxBuffer.Size;
+
+                            // 計算淡入淡出透明度
+                            float alpha = isIncoming ? progressHalf : (1.0f - progressHalf);
+                            ImU32 fadingColor = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * alpha));
+
+                            // 先用正常大小把文字畫上去（這時寬度與高度都是 100% 正確的）
+                            drawList->AddText(basePos, fadingColor, str.c_str());
+
+                            int vtx_idx_end = drawList->VtxBuffer.Size;
+
+                            // 如果有產生頂點，我們手動將這些頂點的 Y 座標繞著中心點進行垂直壓縮
+                            if (vtx_idx_end > vtx_idx_begin)
+                            {
+                                // 計算該數字的中心 Y 座標
+                                float centerY = basePos.y + fontHeight * 0.5f;
+
+                                for (int v = vtx_idx_begin; v < vtx_idx_end; v++)
+                                {
+                                    ImDrawVert& vertex = drawList->VtxBuffer[v];
+                                    // 核心 3D 數學公式：讓每個頂點到中心點的垂直距離乘以 scaleY
+                                    vertex.pos.y = centerY + (vertex.pos.y - centerY) * scaleY;
+                                }
+                            }
+                            };                        // 4. 標準 8 次循環
+                        textPos.x += textSizeWeek.x;
+
+                        int count = 8;
+                        for (int i = 0; i < count; i++)
+                        {
+                            arrTimeLen[i] = ImGui::CalcTextSize(arrTime[i].c_str()).x;
+
+                            DigitAnimation& anim = timeAnims[i];
+
+                            // 偵測數字改變
+                            if (arrTime[i] != anim.currentStr)
+                            {
+                                anim.oldStr = anim.currentStr;
+                                anim.currentStr = arrTime[i];
+                                anim.progress = (anim.oldStr.empty()) ? 1.0f : 0.0f;
+                            }
+
+                            // 更新動畫進度
+                            if (anim.progress < 1.0f)
+                            {
+                                anim.progress += deltaTime / ANIM_DURATION;
+                                if (anim.progress > 1.0f) anim.progress = 1.0f;
+                            }
+
+                            // 進行 3D 翻轉渲染
+                            if (anim.progress < 1.0f)
+                            {
+                                if (anim.progress < 0.5f)
+                                {
+                                    // 【前半段：0.0 -> 0.5】舊數字從 0° 翻轉到 90°（漸漸扁平並消失）
+                                    float halfP = anim.progress * 2.0f; // 對齊到 0.0 -> 1.0
+                                    drawFlipChar(textPos, anim.oldStr, halfP, false, arrTimeLen[i]);
+                                }
+                                else
+                                {
+                                    // 【後半段：0.5 -> 1.0】新數字從 90° 翻轉到 0°（從扁平漸漸還原展開）
+                                    float halfP = (anim.progress - 0.5f) * 2.0f; // 對齊到 0.0 -> 1.0
+                                    drawFlipChar(textPos, anim.currentStr, halfP, true, arrTimeLen[i]);
+                                }
+                            }
+                            else
+                            {
+                                // 靜態狀態：正常繪製
+                                drawList->AddText(textPos, color, anim.currentStr.c_str());
+                            }
+
+                            // 移動 X 軸游標
+                            textPos.x += arrTimeLen[i];
+                        }
+                    }
+#else
+                    {
+                        struct DigitAnimation {
+                            std::string currentStr = ""; // 當前顯示的字串
+                            std::string oldStr = "";     // 上一個字串
+                            float progress = 1.0f;       // 動畫進度 (0.0f -> 1.0f)
+                        };
+
+                        static DigitAnimation timeAnims[8];
+                        const float ANIM_DURATION = 0.25f; // 動畫持續時間 (秒)，滾動效果通常快一點視覺感更好
+
+                        // 1. 每幀動態更新目標字串
+                        std::string arrTime[] = { "", "", ":", "", "", ":", "", "" };
+                        arrTime[0] = std::to_string(tm_now.tm_hour / 10);
+                        arrTime[1] = std::to_string(tm_now.tm_hour % 10);
+                        arrTime[3] = std::to_string(tm_now.tm_min / 10);
+                        arrTime[4] = std::to_string(tm_now.tm_min % 10);
+                        arrTime[6] = std::to_string(tm_now.tm_sec / 10);
+                        arrTime[7] = std::to_string(tm_now.tm_sec % 10);
+
+                        // 2. 寬度與高度快取
+                        static ImVec2 symSize0 = ImGui::CalcTextSize(sTimeSymbol[0]);
+                        //static ImVec2 symSize1 = ImGui::CalcTextSize(sTimeSymbol[1]);
+                        float arrTimeLen[8];// = { symSize0.x, symSize0.x, symSize1.x, symSize0.x, symSize0.x, symSize1.x, symSize0.x, symSize0.x };
+                        // 動畫滑動的最大垂直距離（使用字體高度作為基準）
+                        const float MAX_OFFSET = symSize0.y * 0.5f;
+
+                        // 3. 準備顏色與時間增量
+                        float deltaTime = ImGui::GetIO().DeltaTime;
+                        ImVec4 colVec = ImGui::ColorConvertU32ToFloat4(color);
+
+                        // 輔助 Lambda：繪製帶有特定透明度與位置偏移的字串
+                        auto drawStrWithEffects = [&](ImVec2 pos, const std::string& str, float alphaMultiplier, float yOffset) {
+                            if (str.empty()) return;
+                            ImU32 fadingColor = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * alphaMultiplier));
+                            ImVec2 drawPos = ImVec2(pos.x, pos.y + yOffset);
+                            drawList->AddText(drawPos, fadingColor, str.c_str());
+                            };
+
+                        // 4. 標準 8 次循環
+                        textPos.x += textSizeWeek.x;
+                        int count = 8;
+                        for (int i = 0; i < count; i++)
+                        {
+                            arrTimeLen[i] = ImGui::CalcTextSize(arrTime[i].c_str()).x;
+                            DigitAnimation& anim = timeAnims[i];
+
+                            // 偵測該位置的字串是否改變
+                            if (arrTime[i] != anim.currentStr)
+                            {
+                                anim.oldStr = anim.currentStr;
+                                anim.currentStr = arrTime[i];
+                                anim.progress = (anim.oldStr.empty()) ? 1.0f : 0.0f; // 首次載入不播動畫
+                            }
+
+                            // 更新動畫狀態
+                            if (anim.progress < 1.0f)
+                            {
+                                anim.progress += deltaTime / ANIM_DURATION;
+                                if (anim.progress > 1.0f) anim.progress = 1.0f;
+                            }
+
+                            // 根據進度進行「滾動 + 淡入淡出」繪製
+                            if (anim.progress < 1.0f)
+                            {
+                                // 舊數字：淡出 (1 -> 0)，並向下移動 (0 -> MAX_OFFSET)
+                                float alphaOut = 1.0f - anim.progress;
+                                float yOffsetOut = anim.progress * MAX_OFFSET;
+                                drawStrWithEffects(textPos, anim.oldStr, alphaOut, yOffsetOut);
+
+                                // 新數字：淡入 (0 -> 1)，並從上方滑下 (-MAX_OFFSET -> 0)
+                                float alphaIn = anim.progress;
+                                float yOffsetIn = (anim.progress - 1.0f) * MAX_OFFSET;
+                                drawStrWithEffects(textPos, anim.currentStr, alphaIn, yOffsetIn);
+                            }
+                            else
+                            {
+                                // 靜態狀態：正常繪製，無偏移
+                                drawStrWithEffects(textPos, anim.currentStr, 1.0f, 0.0f);
+                            }
+
+                            // 移動 X 軸游標
+                            textPos.x += arrTimeLen[i];
+                        }
+                    }
+#endif
+#endif
+
+                    //Draw Title
                     ImVec2 leftTextPos(winPos.x + titleHeight, textPos.y);
                     drawList->AddText(leftTextPos, color, "AppBox");
   //                  ImGui::PopFont();
