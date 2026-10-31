@@ -398,7 +398,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                             float progress = 1.0f;
                         };
                         static DigitAnimation timeAnims[8];
-                        const float ANIM_DURATION = 0.28f; // 動畫持續時間 (秒)
+                        const float ANIM_DURATION = 0.15f; // 動畫持續時間 (秒)
 
                         // 1. 每幀動態更新目標字串 (與你原本完全一致)
                         std::string arrTime[] = { "", "", ":", "", "", ":", "", "" };
