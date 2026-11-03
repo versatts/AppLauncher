@@ -805,10 +805,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         {
             // 直接寫入標準的 ImGui 視窗設定格式
             // 注意：底部的設定會直接覆蓋掉 ImGui 在上面自動生成的 0,0 錯誤數據！
-            fprintf(f, "\n[Window][###-AppBox-]\n");
+            fprintf(f, "\n[Window][-AppBox-]\n");//为何这里要加###，但自动生成的这一项是不带###的。而且在启动后还会把这里存的位置给应用上？
             fprintf(f, "Pos=%d,%d\n", g_FinalWinX, g_FinalWinY);
             fprintf(f, "Size=%d,%d\n", g_FinalWinW, g_FinalWinH);
-            fprintf(f, "Collapsed=%d\n\n", isCollapsed ? 1 : 0);
+            fprintf(f, "Collapsed=%d\n", isCollapsed ? 1 : 0);
+
+            gCfg.Save(f);
+
             fclose(f);
         }
     }

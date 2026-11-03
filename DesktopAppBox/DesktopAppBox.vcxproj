@@ -159,6 +159,7 @@
     <ClInclude Include="link.h" />
     <ClInclude Include="monitor.h" />
     <ClInclude Include="ResLoader.h" />
+    <ClInclude Include="SettingUI.h" />
     <ClInclude Include="TabHeadUI.h" />
   </ItemGroup>
   <ItemGroup>
@@ -170,6 +171,7 @@
     <ClCompile Include="link.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ResLoader.cpp" />
+    <ClCompile Include="SettingUI.cpp" />
     <ClCompile Include="TabHeadUI.cpp" />
   </ItemGroup>
   <ItemGroup>

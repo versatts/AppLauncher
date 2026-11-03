@@ -15,6 +15,7 @@
     <ClInclude Include="ImGuiObj.h" />
     <ClInclude Include="Application.h" />
     <ClInclude Include="AppConfig.h" />
+    <ClInclude Include="SettingUI.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -28,6 +29,7 @@
     <ClCompile Include="ImGuiObj.cpp" />
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="AppConfig.cpp" />
+    <ClCompile Include="SettingUI.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.txt" />

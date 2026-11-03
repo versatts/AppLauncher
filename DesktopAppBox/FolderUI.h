@@ -80,7 +80,7 @@ private:
 
     void ApplyItemRename(ST_APP& app, const char* newNameUtf8);
 
-    void DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g);
+    void DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g, float fRound);
 
     void DrawItemTooltip(const ST_APP& app, const GridLayout& g);
  

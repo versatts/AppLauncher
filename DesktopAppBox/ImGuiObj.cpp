@@ -1,4 +1,39 @@
 #include "ImGuiObj.h"
+#include <string>
+#include <windows.h>
+// 1. 將 Unicode (wchar_t*) 轉換為 UTF-8 (std::string)
+std::string ImGuiObj::ToU8(const wchar_t* wstr)
+{
+    if (!wstr || wstr[0] == L'\0') return "";
+
+    // 第一次呼叫：取得轉換後所需的緩衝區大小（包含結尾空字元）
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, nullptr, 0, nullptr, nullptr);
+    if (size_needed <= 0) return "";
+
+    std::string strTo(size_needed - 1, 0); // 減 1 是因為 std::string 會自動處理結尾空字元
+
+    // 第二次呼叫：實際進行轉換
+    WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &strTo[0], size_needed, nullptr, nullptr);
+
+    return strTo;
+}
+
+// 2. 將 UTF-8 (char*) 轉換為 Unicode (std::wstring)
+std::wstring ImGuiObj::ToUni(const char* str)
+{
+    if (!str || str[0] == '\0') return L"";
+
+    // 第一次呼叫：取得轉換後所需的緩衝區大小（包含結尾空字元）
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, str, -1, nullptr, 0);
+    if (size_needed <= 0) return L"";
+
+    std::wstring wstrTo(size_needed - 1, 0); // 減 1 是因為 std::wstring 會自動處理結尾空字元
+
+    // 第二次呼叫：實際進行轉換
+    MultiByteToWideChar(CP_UTF8, 0, str, -1, &wstrTo[0], size_needed);
+
+    return wstrTo;
+}
 
 ImU32 ImGuiObj::ToImU32(const std::string& hexStr, float alpha)
 {

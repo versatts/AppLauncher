@@ -65,7 +65,6 @@ void MoveAppElement(std::vector<ST_APP>& vApp, int fromIndex, int toIndex)
 GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
 {
     ImGuiStyle& style = ImGui::GetStyle();
-
     GridLayout g;
     g.bShowText = bShowText;
     float w = g.iconSize.x + btnPadding * 2.0f;
@@ -85,7 +84,7 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
     g.maxItemsPerRow = (int)((windowWidth - 2 * g.sidePadding) / oneItemW);
     if (g.maxItemsPerRow < 1) g.maxItemsPerRow = 1;
 
-    float totalItemsWidth = g.maxItemsPerRow * oneItemW;
+    float totalItemsWidth = g.maxItemsPerRow * oneItemW - 2 * g.itemSpacingX;
 
     g.dynamicPadding = (windowWidth - totalItemsWidth) / 2.0f;
 
@@ -98,8 +97,9 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
     // UTF-8 安全截斷：超出 maxWidth 時保留完整多位元組字元並補 "..."
     std::string FolderUI::TruncateUtf8WithEllipsis(const std::string& text, float maxWidth)
     {
-        const std::string ellipsis = "...";
-        float ellipsisWidth = ImGui::CalcTextSize(ellipsis.c_str()).x;
+        const std::string ellipsis3 = "...";
+        const std::string ellipsis2 = "..";
+        float ellipsisWidth = ImGui::CalcTextSize(ellipsis3.c_str()).x;
         if (ellipsisWidth >= maxWidth)
         {
             return text; // 連 "..." 都放不下時，維持原字串
@@ -130,7 +130,7 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
             result += nextChar;
             charIdx += byteCount;
         }
-        return result + ellipsis;
+        return result + ellipsis2;
     }
 
 
@@ -163,7 +163,7 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         ImGui::PopStyleVar(2);
 
         // 1. 拖曳來源 (Source)
-        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+        if (gCfg.m_bEnableFileDragIO && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
         {
             int currentIdx = (int)itemIdx;
             ImGui::SetDragDropPayload("APP_GRID_ITEM", &currentIdx, sizeof(int));
@@ -269,7 +269,7 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         app.sDisplay = newNameUtf8;
     }
 
-    void FolderUI::DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g)
+    void FolderUI::DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g, float fRound)
     {
         // 懸停滾動狀態（同一時間只有一個項被懸停，單份狀態即可）
         // s_hoverIdx: 當前懸停的項目索引；s_hoverStartTime: 該項目開始懸停的時刻
@@ -311,9 +311,9 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         ImVec2 textBlockMax = ImVec2(btnMax.x, textBlockMin.y + g.textBlockHeight);
 
         ImU32 bgColor = ImGui::GetColorU32(isHoveredNow ? ImGuiCol_ButtonHovered : ImGuiCol_FrameBg);
-        drawList->AddRectFilled(textBlockMin, textBlockMax, bgColor, 4.0f);
+        drawList->AddRectFilled(textBlockMin, textBlockMax, bgColor, fRound);
 
-        const float textPaddingX = 4.0f;
+        const float textPaddingX = 1.0f;
         float maxTextWidth = g.btnSize.x - (textPaddingX * 2.0f);
         // 文字垂直置中於文字塊
         float textY = textBlockMin.y + (g.textBlockHeight - ImGui::GetTextLineHeight()) * 0.5f;
@@ -384,7 +384,7 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         {
             // 長文本 + 未懸停：截斷加 "..."
             std::string finalName = TruncateUtf8WithEllipsis(app.sDisplay, maxTextWidth);
-            drawList->AddText(ImVec2(textBlockMin.x + textPaddingX, textY), textColor, finalName.c_str());
+            drawList->AddText(ImVec2(textBlockMin.x + textPaddingX + 2, textY), textColor, finalName.c_str());
             return;
         }
 
@@ -477,6 +477,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
     ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, cGrabA);
 
     ImGuiWindowFlags win_flags = 0;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     if (ImGui::BeginChild(childWindowId, ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, win_flags))
     {
         // 🚀 更新滾動條顯示狀態（供下一幀 sbAlpha 使用）
@@ -537,7 +538,8 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             ImGui::SetCursorPosX(targetX);
             ImGui::SetCursorPosY(targetY);
 
-            RenderAppButton(hwnd, a, szName, i, g.iconSize, (g.btnSize.x - g.iconSize.x) / 2, moveFrom, moveTo);
+            float fPadding = (g.btnSize.x - g.iconSize.x) / 2;
+            RenderAppButton(hwnd, a, szName, i, g.iconSize, fPadding, moveFrom, moveTo);
 
             // 🚀 記錄該項目的格子矩形（按鈕+文字塊，與懸停判定範圍一致；客戶區絕對座標）
             {
@@ -560,7 +562,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 
             if (g.bShowText)
             {
-                DrawTextBlock(a, i, g);
+                DrawTextBlock(a, i, g, fPadding * 1.3);
             }
 
             if (m_bShowTip)
@@ -637,6 +639,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
         ImGui::SetCursorPosY(maxCalculatedY);
         ImGui::Dummy(ImVec2(0.0f, 1.0f));
     }
+    ImGui::PopStyleVar();
 
     ImGui::EndChild(); // 💡 結束子視窗
     ImGui::PopStyleColor(4); // 🚀 彈出自動隱藏滾動條的透明色

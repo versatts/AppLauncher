@@ -1,7 +1,8 @@
 ﻿#include "Application.h"
 #include <algorithm>
 #include "link.h"
-
+#include "AppConfig.h"
+#include "imguiobj.h"
 // Helper functions
 bool Application::CreateDeviceD3D(HWND hWnd)
 {
@@ -90,9 +91,9 @@ void Application::InitImGuiContext(float fScale)
     //io.ConfigDockingTransparentPayload = true;
 
     // Setup Dear ImGui style
-    //ImGui::StyleColorsDark();
+    ImGui::StyleColorsDark();
     //ImGui::StyleColorsLight();
-    ImGui::StyleColorsClassic();
+    //ImGui::StyleColorsClassic();
 
     // Setup scaling
     ImGuiStyle& style = ImGui::GetStyle();
@@ -106,7 +107,7 @@ void Application::InitImGuiContext(float fScale)
 
     style.ScrollbarSize = 7.0f; // 🚀 細滾動條（配合 FolderUI 的自動隱藏滾動條；須在 ScaleAllSizes 之後設定）
 
-    style.TabRounding = 3.0f; // Rounded tops
+    style.TabRounding = style.FramePadding.x * 2; // Rounded tops
     style.TabBorderSize = 0.0f; // 💡 CHANGED: Force 1-pixel frame around the tab headers
 
     ImVec4* colors = style.Colors;
@@ -122,18 +123,23 @@ void Application::InitImGuiContext(float fScale)
     // 1. 獲取系統 Windows 強調色字串 (例如 "#4B4B52")
     std::string winColorStr = GetWindowsAccentColor();
     ImVec4 accClr = IMVEC4(winColorStr);
+
     // 2. 核心背景色設置
     // 視窗背景 (WindowBg) 與 標題列 (TitleBg) 都套用系統主色
     colors[ImGuiCol_WindowBg] = ChangeColorBrightness(accClr, 0.5);
     colors[ImGuiCol_FrameBg] = ChangeColorBrightness(accClr, 0.8);
+
+    colors[ImGuiCol_FrameBgHovered] = ChangeColorBrightness(accClr, 0.9 );
+    colors[ImGuiCol_FrameBgActive] = ChangeColorBrightness(accClr, 0.8);
+        
     colors[ImGuiCol_TitleBg] = ChangeColorBrightness(accClr, 0.3);
     colors[ImGuiCol_TitleBgActive] = accClr;
     colors[ImGuiCol_TitleBgCollapsed] = IMVEC4(winColorStr, 0.4f);
 
     colors[ImGuiCol_TextDisabled] = accClr;
 
-    colors[ImGuiCol_Tab] = ChangeColorBrightness(accClr, 0.7);
-    colors[ImGuiCol_TabActive] = ChangeColorBrightness(accClr, 0.95);
+    colors[ImGuiCol_Tab] = ChangeColorBrightness(accClr, 0.8);
+    colors[ImGuiCol_TabActive] = ChangeColorBrightness(accClr, 0.8);
     colors[ImGuiCol_TabHovered] = ChangeColorBrightness(accClr, 1.1);
 
 
@@ -143,9 +149,9 @@ void Application::InitImGuiContext(float fScale)
     colors[ImGuiCol_ResizeGripHovered]     = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
     colors[ImGuiCol_ResizeGripActive]      = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    colors[ImGuiCol_Button] = ChangeColorBrightness(accClr, 0.7);
+    colors[ImGuiCol_Button] = ChangeColorBrightness(accClr, 0.8);
     colors[ImGuiCol_ButtonActive] = ChangeColorBrightness(accClr, 0.8);
-    colors[ImGuiCol_ButtonHovered] = ChangeColorBrightness(accClr, 1.1);
+    colors[ImGuiCol_ButtonHovered] = ChangeColorBrightness(accClr, 0.9);
 
     // 🚀 滾動條顏色：5px 細滾動條需要高對比，正常狀態的滑塊(grab)也要清晰可見
     colors[ImGuiCol_ScrollbarBg] = ChangeColorBrightness(accClr, 0.7);
@@ -169,6 +175,8 @@ void Application::InitImGuiContext(float fScale)
     colors[ImGuiCol_Text] = textColor;
     colors[ImGuiCol_TextDisabled] = disabledTextColor;
     colors[ImGuiCol_TableHeaderBg] = IMVEC4(winColorStr, 0.8f);
+    colors[ImGuiCol_CheckMark] = textColor;
+    
 #endif
 #if 0
     colors[ImGuiCol_TitleBg] = IMCLR("#FFC90E");
@@ -226,16 +234,49 @@ void Application::InitImGuiContext(float fScale)
     }
 
     // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
-    float fontSize = 24;
+// 1. 動態讀取配置中的字號（如果小於安全值則給予預設值）
+    float fontSize = (gCfg.m_nFontSize > 0) ? static_cast<float>(gCfg.m_nFontSize) : 24.0f;
 
     ImFontConfig cfg;
     cfg.OversampleH = 2;
     cfg.OversampleV = 2;
     cfg.PixelSnapH = true;
-    //ImFont* fontDefault = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\BRITANIC.ttf", fontSize, &cfg);
-    ImFont* fontDefault = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\TCCEB.TTf", fontSize, &cfg);
+
+    // ====== 新增：套用粗體與斜體設定 ======
+    // 粗體處理：調高光柵化乘數來加粗線條（預設為 1.0f，1.3f~1.5f 左右有明顯的加粗效果）
+    if (gCfg.m_bFontBold)
+    {
+        cfg.RasterizerMultiply = 1.35f;
+    }
+
+    // 斜體處理：設定斜體標記（ImGui 內部會自動為頂點加上傾斜矩陣）
+    //if (gCfg.m_bFontItalic)
+    //{
+    //    cfg.GlyphSlanted = true;
+    //}
+    // ======================================
+
+    std::string sFontPath = "C:\\Windows\\Fonts\\";
+    std::string sFont = sFontPath + gCfg.m_sEnFont;
+
+    // 檢查檔案是否存在，避免因設定錯誤字體導致崩潰
+    ImFont* fontDefault = nullptr;
+    DWORD attrib = GetFileAttributesA(sFont.c_str());
+    if (attrib != INVALID_FILE_ATTRIBUTES && !(attrib & FILE_ATTRIBUTE_DIRECTORY))
+    {
+        fontDefault = io.Fonts->AddFontFromFileTTF(sFont.c_str(), fontSize, &cfg);
+
+        // 建議同時傳入簡中/繁中/日文的字元集範圍，避免中文變豆腐塊
+        // ImFont* fontDefault = io.Fonts->AddFontFromFileTTF(sFont.c_str(), fontSize, &cfg, io.Fonts->GetGlyphRangesChineseFull());
+    }
+    else
+    {
+        // 備用方案：如果設定的字體不小心不見了，改加載系統預設雅黑或內建字體
+        std::string sFallback = sFontPath + "msyh.ttc"; // 微軟雅黑
+        io.Fonts->AddFontFromFileTTF(sFallback.c_str(), fontSize, &cfg, io.Fonts->GetGlyphRangesChineseFull());
+    }
     
-    fontSize -= 2;
+    //fontSize -= 2;
     ImFontConfig cfg1;
     cfg1.OversampleH = 2;
     cfg1.OversampleV = 2;

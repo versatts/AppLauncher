@@ -5,14 +5,16 @@
 #include "imgui_impl_dx11.h"
 #include "imgui_internal.h"
 #include <string>
+#include <tchar.h>
 class ImGuiObj
 {
 public:
 	static ImColor ToImClr(const std::string& hexStr);
-
 	static ImVec4 ToImVec4(const std::string& hexStr, float alpha = 1.0f);
-
 	static ImU32 ToImU32(const std::string& hexStr, float alpha = 1.0f);
+
+	static std::string ToU8(const wchar_t*);
+	static std::wstring ToUni(const char*);
 };
 
 #define IMCLR ImGuiObj::ToImClr

@@ -1,7 +1,7 @@
 ﻿#include "TabHeadUI.h"
 #include "link.h"     // StripOrderPrefix（TAB 顯示名去掉 "NNNN-" 排序前綴）
 #include <windows.h>
-
+#include "SettingUI.h"
 void TabHeadUI::Render()
 {
     if (m_arrTab.size() == 0 || (m_Idx < 0 && m_Idx >= m_arrTab.size()))
@@ -11,6 +11,7 @@ void TabHeadUI::Render()
 
     char tabBarId[64];
     sprintf_s(tabBarId, "AppBox_Category_Tabs##v%d", m_tabBarVersion);
+
     if (ImGui::BeginTabBar(tabBarId, ImGuiTabBarFlags_None))
     {
         // 🟢 🎯 核心修正 1：建立一個簡單安全的靜態 Hover 快取陣列（支援多達 64 個分頁）
@@ -47,6 +48,9 @@ void TabHeadUI::Render()
             }
 
             const bool restoring = (m_restoreCountdown > 0);
+
+            //ImGui::SetNextItemWidth(80);
+           
             bool selected = ImGui::BeginTabItem(tabNameUtf8.c_str(), nullptr,
                 (restoring && i == m_Idx) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None);
 
@@ -98,8 +102,27 @@ void TabHeadUI::Render()
             }
             i++;
         }
+
         ImGui::EndTabBar();
     }
+
+    ImVec2 tabBarSize = ImGui::GetItemRectSize();
+
+    float windowPaddingX = ImGui::GetStyle().WindowPadding.x;
+    float buttonWidth = 60.0f; // 這裡可以自訂你的按鈕寬度
+    float targetPosX = ImGui::GetWindowWidth() - windowPaddingX - buttonWidth;
+
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(targetPosX);
+
+    static bool openSetModal = false;
+    // 2. 點擊按鈕時，僅設定開啟標記
+    if (ImGui::Button("Set", ImVec2(buttonWidth, tabBarSize.y - 3.0f)))
+    {
+        openSetModal = true;
+    }
+
+    SettingUI::Render(openSetModal);
 
     if (m_restoreCountdown > 0)
     {
