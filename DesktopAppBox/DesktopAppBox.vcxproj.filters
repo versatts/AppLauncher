@@ -21,6 +21,9 @@
     <ClInclude Include="..\ImGuiCustom\ImGuiObj.h">
       <Filter>ImGuiCustom</Filter>
     </ClInclude>
+    <ClInclude Include="..\ImGuiCustom\CustomUI.h">
+      <Filter>ImGuiCustom</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -35,6 +38,9 @@
     <ClCompile Include="AppConfig.cpp" />
     <ClCompile Include="SettingUI.cpp" />
     <ClCompile Include="..\ImGuiCustom\ImGuiObj.cpp">
+      <Filter>ImGuiCustom</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ImGuiCustom\CustomUI.cpp">
       <Filter>ImGuiCustom</Filter>
     </ClCompile>
   </ItemGroup>

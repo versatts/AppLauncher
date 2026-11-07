@@ -151,6 +151,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\ImGuiCustom\CustomUI.h" />
     <ClInclude Include="..\ImGuiCustom\ImGuiObj.h" />
     <ClInclude Include="AppConfig.h" />
     <ClInclude Include="Application.h" />
@@ -163,6 +164,7 @@
     <ClInclude Include="TabHeadUI.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\ImGuiCustom\CustomUI.cpp" />
     <ClCompile Include="..\ImGuiCustom\ImGuiObj.cpp" />
     <ClCompile Include="AppConfig.cpp" />
     <ClCompile Include="Application.cpp" />
