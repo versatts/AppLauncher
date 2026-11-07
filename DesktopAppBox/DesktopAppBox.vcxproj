@@ -100,7 +100,7 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>C:\code\imgui;C:\code\imgui\backends;..\TestDialog;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\code\imgui;C:\code\imgui\backends;..\ImGuiCustom;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -151,11 +151,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\ImGuiCustom\ImGuiObj.h" />
     <ClInclude Include="AppConfig.h" />
     <ClInclude Include="Application.h" />
     <ClInclude Include="FolderUI.h" />
     <ClInclude Include="FolderUIData.h" />
-    <ClInclude Include="ImGuiObj.h" />
     <ClInclude Include="link.h" />
     <ClInclude Include="monitor.h" />
     <ClInclude Include="ResLoader.h" />
@@ -163,11 +163,11 @@
     <ClInclude Include="TabHeadUI.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\ImGuiCustom\ImGuiObj.cpp" />
     <ClCompile Include="AppConfig.cpp" />
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="FolderUI.cpp" />
     <ClCompile Include="FolderUIData.cpp" />
-    <ClCompile Include="ImGuiObj.cpp" />
     <ClCompile Include="link.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ResLoader.cpp" />

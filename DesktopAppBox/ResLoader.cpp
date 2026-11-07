@@ -460,23 +460,7 @@ ID3D11ShaderResourceView* ResLoader::LoadHighestResIconSRV(ID3D11Device* pDevice
     // =========================================================================
     if (pathLen > 4 && _wcsicmp(exePath + pathLen - 4, L".png") == 0)
     {
-        HANDLE hFile = ::CreateFileW(exePath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hFile == INVALID_HANDLE_VALUE)
-            return nullptr;
-
-        LARGE_INTEGER fileSize = {};
-        ID3D11ShaderResourceView* pSRV = nullptr;
-        if (::GetFileSizeEx(hFile, &fileSize) && fileSize.QuadPart > 0 && fileSize.QuadPart <= 64 * 1024 * 1024) // 64MB 防禦
-        {
-            std::vector<BYTE> pngBlob((size_t)fileSize.QuadPart);
-            DWORD bytesRead = 0;
-            if (::ReadFile(hFile, pngBlob.data(), (DWORD)pngBlob.size(), &bytesRead, nullptr) && bytesRead == pngBlob.size())
-            {
-                pSRV = CreateSRVFromPngBlob(pDevice, pngBlob, outW, outH);
-            }
-        }
-        ::CloseHandle(hFile);
-        return pSRV;
+        return LoadPng(exePath, outW, outH);
     }
 
     // =========================================================================
@@ -520,6 +504,26 @@ ID3D11ShaderResourceView* ResLoader::LoadHighestResIconSRV(ID3D11Device* pDevice
     return nullptr;
 }
 
+ID3D11ShaderResourceView* ResLoader::LoadPng(const std::wstring& sPath, UINT& outW, UINT& outH)
+{
+    HANDLE hFile = ::CreateFileW(sPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE)
+        return nullptr;
+
+    LARGE_INTEGER fileSize = {};
+    ID3D11ShaderResourceView* pSRV = nullptr;
+    if (::GetFileSizeEx(hFile, &fileSize) && fileSize.QuadPart > 0 && fileSize.QuadPart <= 64 * 1024 * 1024) // 64MB 防禦
+    {
+        std::vector<BYTE> pngBlob((size_t)fileSize.QuadPart);
+        DWORD bytesRead = 0;
+        if (::ReadFile(hFile, pngBlob.data(), (DWORD)pngBlob.size(), &bytesRead, nullptr) && bytesRead == pngBlob.size())
+        {
+            pSRV = CreateSRVFromPngBlob(m_pDevice, pngBlob, outW, outH);
+        }
+    }
+    ::CloseHandle(hFile);
+    return pSRV;
+}
 
 ID3D11ShaderResourceView* ResLoader::CreateSRVFromPngBlob(ID3D11Device* pDevice, const std::vector<BYTE>& pngBlob, UINT& outW, UINT& outH)
 {
@@ -855,7 +859,7 @@ BOOL CALLBACK EnumGroupIconCallback_Universal(HMODULE hMod, LPCWSTR lpszType, LP
     return FALSE; // 👈 關鍵：不管是數字還是字串，只要拿到第一個圖標群組就立刻中斷列舉退出！
 }
 
-// 從 exePath 讀取 RT_GROUP_ICON，選出尺寸最大圖標，輸出原始資源 blob
+// 從 sPath 讀取 RT_GROUP_ICON，選出尺寸最大圖標，輸出原始資源 blob
 // 返回 false 失敗；pBlob 輸出二進位，width/height 輸出圖標尺寸
 bool ResLoader::LoadLargestIconResourceFromExe(const wchar_t* exePath, std::vector<BYTE>& pBlob, UINT& width, UINT& height)
 {

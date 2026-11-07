@@ -3,6 +3,11 @@
 #include "ResLoader.h"
 void FolderUIData::Init(ID3D11Device* pd3dDevice, ResLoader* pRL)
 {
+    std::wstring s0 = GetRootDir();
+    s0 += L"set.png";
+    UINT w, h;
+    m_texSet = (ImTextureID)pRL->LoadPng(s0, w, h);
+
     std::wstring sDir;
     std::vector<std::wstring> vFolder;
     auto lnkList = EnumLnkFilesInAppDir(sDir, vFolder);

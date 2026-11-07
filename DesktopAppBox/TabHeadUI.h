@@ -9,7 +9,6 @@ class TabHeadUI: public ImGuiObj
 public:
 	void Render();
 	int m_Idx = -1;
-	std::vector<std::wstring> m_arrTab;   // 磁碟目錄名（含 "NNNN-" 排序前綴，顯示時去掉）
 
 	// 🚀 TAB 拖動排序：Render 偵測到拖放後記錄 from/to，由主循環消費
 	//    （需同步重排 FolderUIData 的 gvFolder / gvFolderName，故不在此處直接執行）

@@ -132,6 +132,18 @@ std::wstring GetLnkDirForFolder(const std::wstring& subDirName)
     return dir;
 }
 
+std::wstring GetRootDir()
+{
+    WCHAR exeFullPath[MAX_PATH] = { 0 };
+    GetModuleFileNameW(NULL, exeFullPath, MAX_PATH);
+
+    WCHAR* pSlash = wcsrchr(exeFullPath, L'\\');
+    if (!pSlash) return L"";
+
+    std::wstring dir(exeFullPath, pSlash - exeFullPath);
+    dir += L"\\";
+    return dir;
+}
 // ===== 🚀 排序前綴工具實現 =====
 
 std::wstring StripOrderPrefix(const std::wstring& name)

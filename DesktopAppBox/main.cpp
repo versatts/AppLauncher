@@ -165,6 +165,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     g_pSwapChain = theApp.g_pSwapChain;
     g_SwapChainOccluded = theApp.g_SwapChainOccluded;
 
+    gRes.m_pDevice = g_pd3dDevice;
+
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
 
@@ -180,7 +182,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     gTabUI.m_Idx = 0;
     if (gFUD.gvFolder.size())
     {
-        gTabUI.m_arrTab = gFUD.gvFolderName;
         gFUD.m_pIdx = &gTabUI.m_Idx;
     }
 
@@ -723,7 +724,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     if (gTabUI.m_pendingTabMoveFrom > 0 && gTabUI.m_pendingTabMoveTo > 0)
                     {
                         gFUD.MoveFolder(gTabUI.m_pendingTabMoveFrom, gTabUI.m_pendingTabMoveTo);
-                        gTabUI.m_arrTab = gFUD.gvFolderName;
                         gTabUI.m_tabBarVersion++;
                         gTabUI.m_restoreCountdown = 10;
                         gTabUI.m_pendingTabMoveFrom = -1;
@@ -1015,6 +1015,25 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         g_bStart = (1 == (int)wParam);
     }
     break;
+    case WM_QUERYENDSESSION:
+        // 1. 檢查是否有未儲存的工作，可以在此跳出提示（但不建議阻擋太久）
+        // 2. 回傳 TRUE 代表同意關機
+        ::MessageBox(NULL, _T("content"), _T("title"), MB_OK);
+        return TRUE;
+
+    case WM_ENDSESSION:
+        // wParam 為 TRUE 代表系統確定要關機/登出
+        if (wParam == TRUE)
+        {
+            // 執行您的正常退出清理邏輯
+            // 儲存資料
+            // 釋放資源
+
+            // 告知系統我們處理完畢並結束程式
+            PostQuitMessage(0);
+        }
+        return 0;
+
     case WM_SIZE:
         if (wParam == SIZE_MINIMIZED)
             return 0;

@@ -50,6 +50,8 @@ public:
 
     int* m_pIdx = nullptr;
     bool m_bShowName = true;
+    
+    ImTextureID m_texSet = 0;
 private:
     void MakeOneFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, std::vector<std::wstring>& lnkList, ST_FOLDER& folder);
 };

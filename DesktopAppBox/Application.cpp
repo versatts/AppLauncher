@@ -104,6 +104,7 @@ void Application::InitImGuiContext(float fScale)
 
     style.FramePadding.x = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
     style.FramePadding.y = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
+    style.FrameBorderSize = 0.5f;
 
     style.ScrollbarSize = 7.0f; // 🚀 細滾動條（配合 FolderUI 的自動隱藏滾動條；須在 ScaleAllSizes 之後設定）
 
@@ -128,6 +129,7 @@ void Application::InitImGuiContext(float fScale)
     // 視窗背景 (WindowBg) 與 標題列 (TitleBg) 都套用系統主色
     colors[ImGuiCol_WindowBg] = ChangeColorBrightness(accClr, 0.5);
     colors[ImGuiCol_FrameBg] = ChangeColorBrightness(accClr, 0.8);
+    //colors[ImGuiCol_Border] = ChangeColorBrightness(accClr, 1.11);
 
     colors[ImGuiCol_FrameBgHovered] = ChangeColorBrightness(accClr, 0.9 );
     colors[ImGuiCol_FrameBgActive] = ChangeColorBrightness(accClr, 0.8);

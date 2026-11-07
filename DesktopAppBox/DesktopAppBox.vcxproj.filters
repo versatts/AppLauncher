@@ -4,6 +4,9 @@
     <Filter Include="sources">
       <UniqueIdentifier>{08e36723-ce4f-4cff-9662-c40801cf1acf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ImGuiCustom">
+      <UniqueIdentifier>{68cce89a-0627-48d7-93f8-03d44157a180}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="monitor.h" />
@@ -12,10 +15,12 @@
     <ClInclude Include="TabHeadUI.h" />
     <ClInclude Include="FolderUI.h" />
     <ClInclude Include="FolderUIData.h" />
-    <ClInclude Include="ImGuiObj.h" />
     <ClInclude Include="Application.h" />
     <ClInclude Include="AppConfig.h" />
     <ClInclude Include="SettingUI.h" />
+    <ClInclude Include="..\ImGuiCustom\ImGuiObj.h">
+      <Filter>ImGuiCustom</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -26,10 +31,12 @@
     <ClCompile Include="TabHeadUI.cpp" />
     <ClCompile Include="FolderUI.cpp" />
     <ClCompile Include="FolderUIData.cpp" />
-    <ClCompile Include="ImGuiObj.cpp" />
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="AppConfig.cpp" />
     <ClCompile Include="SettingUI.cpp" />
+    <ClCompile Include="..\ImGuiCustom\ImGuiObj.cpp">
+      <Filter>ImGuiCustom</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.txt" />
