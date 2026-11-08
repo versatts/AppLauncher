@@ -117,7 +117,7 @@ void TabHeadUI::Render()
     float windowPaddingX = ImGui::GetStyle().WindowPadding.x;
     float buttonWidth = 80.0f; // 這裡可以自訂你的按鈕寬度
     //float buttonWidth = 16 + ImGui::GetStyle().FramePadding.x * 2;
-    ImVec2 btnSize(buttonWidth, tabBarSize.y - 3.0f);
+    ImVec2 btnSize(buttonWidth, tabBarSize.y - 2.0f);
     float targetPosX = ImGui::GetWindowWidth() - windowPaddingX - btnSize.x;
     ImGui::SameLine();
     ImGui::SetCursorPosX(targetPosX);
@@ -130,6 +130,7 @@ void TabHeadUI::Render()
         openSetModal = true;
     }
 
+    btnSize.y = 30;
     static bool bSel = false;
     static bool bEnabled = true;
     if (CustomUI::IconTextToggleButton(&bSel, "Toggle", gFUD.m_texSet, btnSize, ImVec2(16, 16)))

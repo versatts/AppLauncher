@@ -105,6 +105,7 @@ void Application::InitImGuiContext(float fScale)
     style.FramePadding.x = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
     style.FramePadding.y = 4.0f; // 增大，标题栏变高；减小，标题栏变矮
     style.FrameBorderSize = 0.5f;
+    style.FrameRounding = 0;
 
     style.ScrollbarSize = 7.0f; // 🚀 細滾動條（配合 FolderUI 的自動隱藏滾動條；須在 ScaleAllSizes 之後設定）
 
