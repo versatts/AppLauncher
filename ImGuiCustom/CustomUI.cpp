@@ -128,7 +128,7 @@ bool CustomUI::IconTextButtonCore(const char* label, const ImVec2& btnSize, ImTe
     const ImRect bb(pos, ImVec2(pos.x + size.x, pos.y + size.y));
 
     // 分配 UI 空間，並計算排版游標
-    ImGui::ItemSize(size, style.FramePadding.y);
+    ImGui::ItemSize(size);
 
     // 取得唯一的元件 ID，並加入到視窗裁剪判定中
     const ImGuiID id = window->GetID(label);
