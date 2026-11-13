@@ -45,6 +45,9 @@
     <ClInclude Include="..\..\imgui\backends\imgui_impl_win32.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\imgui\misc\cpp\imgui_stdlib.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ImGuiStatic.cpp">
@@ -72,6 +75,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="..\..\imgui\imgui_widgets.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\imgui\misc\cpp\imgui_stdlib.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
