@@ -83,5 +83,15 @@ private:
     void DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g, float fRound);
 
     void DrawItemTooltip(const ST_APP& app, const GridLayout& g);
+
+    bool FolderUI::ImageTextButton(const char* str_id,
+        ImTextureID user_texture_id,
+        const ImVec2& icon_size,
+        int padding,
+        bool show_text,
+        const char* label,
+        ImFont* text_font,
+        float text_gap,
+        bool* out_text_double_clicked = nullptr);
  
 };

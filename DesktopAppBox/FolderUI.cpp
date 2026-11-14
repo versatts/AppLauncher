@@ -135,21 +135,44 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
     }
 
 
-    // ============================================================
-    // 單個 App 項目：圖標按鈕 + 點擊啟動 + 拖曳排序
-    // ============================================================
+    static int s_editingIdx = -1;
+    static char s_renameBuf[256] = {0};
+    static bool s_justStartedEdit = false;
+
     void FolderUI::RenderAppButton(HWND hwnd, ST_APP& app, const char* btnId, size_t itemIdx,
         GridLayout& g, int padding, int& moveFrom, int& moveTo)
     {
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padding, padding));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, padding * 2);
-        if (ImGui::ImageButton(btnId, (ImTextureID)app.iconSrv, g.iconSize))
+        ImGui::PushID((int)itemIdx);
+
+        bool isEditing = (s_editingIdx == (int)itemIdx);
+        bool textDoubleClicked = false;
+
+        // 編輯態時，按鈕本身不畫文字（show_text = false），改由下方 InputText 接手
+        bool clicked = ImageTextButton(
+            btnId,
+            (ImTextureID)app.iconSrv,
+            g.iconSize,
+            padding,
+            g.bShowText && !isEditing,
+            app.sDisplay.c_str(),
+            theApp.m_vFont[2],
+            padding * 1.3f,
+            &textDoubleClicked
+        );
+
+        // 雙擊文字區：進入編輯態（不觸發程式啟動）
+        if (textDoubleClicked)
         {
-            // 🚀 工作目錄設為目標程式所在目錄：否則目標 exe 會繼承啟動器的
-            //    工作目錄，把設定檔/資料夾/日誌等生成到啟動器目錄裡。
-            //    URL / shell:::{GUID} 等非檔案路徑無目錄概念，維持原行為。
-            // 🚀 lnk 中記錄的啟動參數原樣透傳（lpParameters）。
-            const wchar_t* pArgs = (app.exeArgsBuf[0] != L'\0') ? app.exeArgsBuf : nullptr;
+            s_editingIdx = (int)itemIdx;
+            s_justStartedEdit = true;
+            strncpy_s(s_renameBuf, sizeof(s_renameBuf), app.sDisplay.c_str(), _TRUNCATE);
+        }
+        // 單擊按鈕（且非雙擊文字）：啟動目標程式
+        else if (clicked)
+        {
+            s_editingIdx = -1;
+
+            const wchar_t* pArgs = (app.exeArgsBuf != L'\0') ? app.exeArgsBuf : nullptr;
             const wchar_t* pSlash = wcsrchr(app.exePathBuf, L'\\');
             if (pSlash)
             {
@@ -161,30 +184,20 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
                 ShellExecuteW(hwnd, L"open", app.exePathBuf, pArgs, nullptr, SW_SHOW);
             }
         }
-        ImGui::PopStyleVar(2);
 
-        if (g.bShowText)
-            {
-                ImGui::PushFont(theApp.m_vFont[1]);
-
-                DrawTextBlock(app, itemIdx, g, padding * 1.3);
-
-                ImGui::PopFont();
-            }
-
-        // 1. 拖曳來源 (Source)
+        // 1. 拖曳來源 (Source) —— 直接綁定在上面的 ImageTextButton 上
         if (gCfg.m_bEnableFileDragIO && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
         {
             int currentIdx = (int)itemIdx;
             ImGui::SetDragDropPayload("APP_GRID_ITEM", &currentIdx, sizeof(int));
 
-            // 拖曳時跟隨滑鼠顯示的小浮動視窗內容
+            // 拖曳時同時顯示圖示與文字
+            ImVec2 dragIconSize(24.0f, 24.0f);
+            ImGui::Image((ImTextureID)app.iconSrv, dragIconSize);
+            ImGui::SameLine();
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (dragIconSize.y - ImGui::GetTextLineHeight()) * 0.5f);
             ImGui::Text("移動: %s", app.sDisplay.c_str());
 
-            // 🚀 拖出檢測：拖著項目離開視窗客戶區一定距離後，進入「待確認移除」狀態
-            //    （窗外鬆開 = 刪除 lnk；拖回窗內鬆開 = 移位；ESC = 取消）
-            //    注意：不能用 io.MousePos 判斷——滑鼠離開客戶區後視窗收不到 WM_MOUSEMOVE，
-            //    io.MousePos 會停在邊緣不再更新，必須主動查詢全域游標位置。
             if (gCfg.m_bEnableFileDragIO && !app.sLnkPath.empty())
             {
                 POINT pt;
@@ -192,14 +205,14 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
                 ::ScreenToClient(hwnd, &pt);
                 RECT rc;
                 ::GetClientRect(hwnd, &rc);
-                const int margin = 30; // 超出邊緣多少像素才觸發，避免貼著邊緣拖動排序時誤觸
+                const int margin = 30;
                 if (pt.x < -margin || pt.y < -margin || pt.x > rc.right + margin || pt.y > rc.bottom + margin)
                 {
-                    // 結束 ImGui 內部拖曳，改由 Render 尾部的拖出狀態機接管
                     ImGui::EndDragDropSource();
                     s_dragOutArmed = true;
                     s_dragOutFromIdx = (int)itemIdx;
                     s_dragOutLnkPath = app.sLnkPath;
+                    ImGui::PopID();
                     return;
                 }
             }
@@ -217,7 +230,44 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
             }
             ImGui::EndDragDropTarget();
         }
+
+        // 3. 若處於編輯態，在圖示下方直接渲染 InputText
+        if (g.bShowText && isEditing)
+        {
+            ImGui::PushFont(theApp.m_vFont[2]);
+            ImGui::SetNextItemWidth(g.iconSize.x + padding * 2.0f);
+
+            if (s_justStartedEdit)
+            {
+                ImGui::SetKeyboardFocusHere();
+                s_justStartedEdit = false;
+            }
+
+            ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
+            bool enterPressed = ImGui::InputText("##rename_input", s_renameBuf, sizeof(s_renameBuf), flags);
+            bool escPressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
+            bool deactivated = ImGui::IsItemDeactivated();
+
+            if (enterPressed || (deactivated && !escPressed))
+            {
+                if (s_renameBuf != '\0')
+                {
+                    app.sDisplay = s_renameBuf;
+                }
+                s_editingIdx = -1;
+            }
+            else if (escPressed)
+            {
+                s_editingIdx = -1;
+            }
+            ImGui::PopFont();
+        }
+
+        ImGui::PopID();
     }
+
+
+
 
     // ============================================================
     // 文字塊：懸停時底色同按鈕懸停色；長文本懸停時跑馬燈滾動
@@ -732,3 +782,97 @@ bool FolderUI::ApplyIconToItem(POINT screenPt, const std::wstring& srcIconPath)
     return ::CopyFileW(srcIconPath.c_str(), dstPath.c_str(), FALSE) ? true : false;
 }
 
+bool FolderUI::ImageTextButton(
+    const char* str_id,
+    ImTextureID user_texture_id,
+    const ImVec2& icon_size,
+    int padding,
+    bool show_text,
+    const char* label,
+    ImFont* text_font,
+    float text_gap,
+    bool* out_text_double_clicked)
+{
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    if (window->SkipItems)
+        return false;
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float btnWidth = icon_size.x + padding * 2.0f;
+    const float btnHeight = icon_size.y + padding * 2.0f;
+
+    // 1. 計算文字高度（僅在開啟文字且非編輯態時納入高度）
+    float textHeight = 0.0f;
+    ImVec2 textSize(0.0f, 0.0f);
+    if (show_text && label != nullptr)
+    {
+        if (text_font) ImGui::PushFont(text_font);
+        // 限制文字最大寬度與按鈕同寬，避免過長撐開佈局
+        textSize = ImGui::CalcTextSize(label, nullptr, false, btnWidth);
+        textHeight = text_gap + ImGui::GetTextLineHeight(); // 或是使用 textSize.y 支援多行
+        if (text_font) ImGui::PopFont();
+    }
+
+    // 2. 計算整體透明按鈕的尺寸：關閉文字時與原 ImageButton 完全相同
+    ImVec2 totalSize(btnWidth, btnHeight + textHeight);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+
+    // 3. 提交唯一的 InvisibleButton 統一掌管排版佔位、Hover、Active、點擊與拖曳
+    bool pressed = ImGui::InvisibleButton(str_id, totalSize);
+    bool hovered = ImGui::IsItemHovered();
+    bool active = ImGui::IsItemActive();
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    // 4. 繪製上方圖示按鈕的背景框（Hover 整個區域時都會高亮）
+    ImVec2 btnMax(pos.x + btnWidth, pos.y + btnHeight);
+    ImU32 bgCol = ImGui::GetColorU32(
+        active ? ImGuiCol_ButtonActive :
+        hovered ? ImGuiCol_ButtonHovered :
+        ImGuiCol_Button
+    );
+    drawList->AddRectFilled(pos, btnMax, bgCol, (float)(padding * 2));
+
+    // 5. 繪製應用程式圖示
+    ImVec2 imgMin(pos.x + padding, pos.y + padding);
+    ImVec2 imgMax(imgMin.x + icon_size.x, imgMin.y + icon_size.y);
+    drawList->AddImage(user_texture_id, imgMin, imgMax);
+
+    // 6. 繪製下方文字與偵測文字區雙擊
+    if (out_text_double_clicked) *out_text_double_clicked = false;
+
+    bool isMouseInText = false;
+    if (show_text && label != nullptr)
+    {
+        if (text_font) ImGui::PushFont(text_font);
+
+        ImVec2 textAreaMin(pos.x, btnMax.y + text_gap);
+        ImVec2 textAreaMax(pos.x + btnWidth, pos.y + totalSize.y);
+
+        // 水平置中計算（若文字超過按鈕寬度則靠左並裁切）
+        float drawX = pos.x + (btnWidth - textSize.x) * 0.5f;
+        if (drawX < pos.x) drawX = pos.x;
+
+        ImU32 textCol = ImGui::GetColorU32(ImGuiCol_Text);
+        // 使用 ClipRect 防止超長檔名溢出到隔壁格子
+        drawList->PushClipRect(textAreaMin, textAreaMax, true);
+        drawList->AddText(ImVec2(drawX, textAreaMin.y), textCol, label);
+        drawList->PopClipRect();
+
+        isMouseInText = ImGui::IsMouseHoveringRect(textAreaMin, textAreaMax);
+        // 偵測滑鼠是否在「下方文字區」雙擊左鍵
+        if (out_text_double_clicked && hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            if (isMouseInText)
+            {
+                *out_text_double_clicked = true;
+            }
+        }
+
+        if (text_font) ImGui::PopFont();
+    }
+
+    // 關鍵修正：只有點擊「圖示按鈕區域」才回傳 pressed = true；
+// 點擊或雙擊「下方文字區域」不會觸發啟動程式！
+    return pressed && !isMouseInText;
+}
