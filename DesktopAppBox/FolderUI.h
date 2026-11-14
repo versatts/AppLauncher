@@ -75,8 +75,8 @@ private:
 
     std::string TruncateUtf8WithEllipsis(const std::string& text, float maxWidth);
 
-    void RenderAppButton(HWND hwnd, const ST_APP& app, const char* btnId, size_t itemIdx,
-        ImVec2 iconSize, int padding, int& moveFrom, int& moveTo);
+    void RenderAppButton(HWND hwnd, ST_APP& app, const char* btnId, size_t itemIdx,
+        GridLayout& g, int padding, int& moveFrom, int& moveTo);
 
     void ApplyItemRename(ST_APP& app, const char* newNameUtf8);
 

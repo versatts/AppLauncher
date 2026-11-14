@@ -2,6 +2,7 @@
 #include "FolderUIData.h"
 #include "link.h"    // StripOrderPrefix（改名時保留排序前綴）
 #include "AppConfig.h"
+#include "Application.h"
 // 來自 main.cpp：檔案拖入/拖出功能總開關
 extern AppConfig gCfg;
 // 來自 main.cpp：拖出確認後刪除 lnk 檔案，並排隊幀末熱重載當前分頁
@@ -137,12 +138,12 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
     // ============================================================
     // 單個 App 項目：圖標按鈕 + 點擊啟動 + 拖曳排序
     // ============================================================
-    void FolderUI::RenderAppButton(HWND hwnd, const ST_APP& app, const char* btnId, size_t itemIdx,
-                         ImVec2 iconSize, int padding, int& moveFrom, int& moveTo)
+    void FolderUI::RenderAppButton(HWND hwnd, ST_APP& app, const char* btnId, size_t itemIdx,
+        GridLayout& g, int padding, int& moveFrom, int& moveTo)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padding, padding));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, padding * 2);
-        if (ImGui::ImageButton(btnId, (ImTextureID)app.iconSrv, iconSize))
+        if (ImGui::ImageButton(btnId, (ImTextureID)app.iconSrv, g.iconSize))
         {
             // 🚀 工作目錄設為目標程式所在目錄：否則目標 exe 會繼承啟動器的
             //    工作目錄，把設定檔/資料夾/日誌等生成到啟動器目錄裡。
@@ -161,6 +162,15 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
             }
         }
         ImGui::PopStyleVar(2);
+
+        if (g.bShowText)
+            {
+                ImGui::PushFont(theApp.m_vFont[1]);
+
+                DrawTextBlock(app, itemIdx, g, padding * 1.3);
+
+                ImGui::PopFont();
+            }
 
         // 1. 拖曳來源 (Source)
         if (gCfg.m_bEnableFileDragIO && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
@@ -268,7 +278,6 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         app.sLnkPath = newPath;
         app.sDisplay = newNameUtf8;
     }
-
     void FolderUI::DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g, float fRound)
     {
         // 懸停滾動狀態（同一時間只有一個項被懸停，單份狀態即可）
@@ -311,12 +320,12 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         ImVec2 textBlockMax = ImVec2(btnMax.x, textBlockMin.y + g.textBlockHeight);
 
         ImU32 bgColor = ImGui::GetColorU32(isHoveredNow ? ImGuiCol_ButtonHovered : ImGuiCol_FrameBg);
-        drawList->AddRectFilled(textBlockMin, textBlockMax, bgColor, fRound);
+       // drawList->AddRectFilled(textBlockMin, textBlockMax, bgColor, fRound);
 
         const float textPaddingX = 1.0f;
         float maxTextWidth = g.btnSize.x - (textPaddingX * 2.0f);
         // 文字垂直置中於文字塊
-        float textY = textBlockMin.y + (g.textBlockHeight - ImGui::GetTextLineHeight()) * 0.5f;
+        float textY = textBlockMin.y;// +(g.textBlockHeight - ImGui::GetTextLineHeight()) * 0.5f;
         ImU32 textColor = ImGui::GetColorU32(ImGuiCol_Text);
 
         // ===== 🚀 雙擊文字塊進入編輯 =====
@@ -418,6 +427,7 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         drawList->PushClipRect(textBlockMin, textBlockMax, true);
         drawList->AddText(ImVec2(textBlockMin.x + textPaddingX - scrollOffset, textY), textColor, app.sDisplay.c_str());
         drawList->PopClipRect();
+
     }
 
     // ============================================================
@@ -539,7 +549,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             ImGui::SetCursorPosY(targetY);
 
             float fPadding = (g.btnSize.x - g.iconSize.x) / 2;
-            RenderAppButton(hwnd, a, szName, i, g.iconSize, fPadding, moveFrom, moveTo);
+            RenderAppButton(hwnd, a, szName, i, g, fPadding, moveFrom, moveTo);
 
             // 🚀 記錄該項目的格子矩形（按鈕+文字塊，與懸停判定範圍一致；客戶區絕對座標）
             {
@@ -560,11 +570,7 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
                 m_hoverLnkPath = a.sLnkPath;
             }
 
-            if (g.bShowText)
-            {
-                DrawTextBlock(a, i, g, fPadding * 1.3);
-            }
-
+            
             if (m_bShowTip)
             {
                 DrawItemTooltip(a, g);

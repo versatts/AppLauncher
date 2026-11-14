@@ -129,7 +129,7 @@ void TabHeadUI::Render()
     {
         openSetModal = true;
     }
-
+#if 0
     btnSize.y = 30;
     static bool bSel = false;
     static bool bEnabled = true;
@@ -146,7 +146,7 @@ void TabHeadUI::Render()
     {
 
     }
-    
+#endif 
 
     SettingUI::Render(openSetModal);
 

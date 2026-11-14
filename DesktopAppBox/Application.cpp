@@ -236,8 +236,8 @@ void Application::InitImGuiContext(float fScale)
         style.Colors[ImGuiCol_WindowBg].w = 1.f;
     }
 
-    // 2. 設置您的微軟雅黑（如果您想讓它成為預設，直接加載並賦值給 FontDefault）
-// 1. 動態讀取配置中的字號（如果小於安全值則給予預設值）
+    m_vFont;
+    // 2. Load font
     float fontSize = (gCfg.m_nFontSize > 0) ? static_cast<float>(gCfg.m_nFontSize) : 24.0f;
 
     ImFontConfig cfg;
@@ -252,72 +252,52 @@ void Application::InitImGuiContext(float fScale)
         cfg.RasterizerMultiply = 1.35f;
     }
 
-    // 斜體處理：設定斜體標記（ImGui 內部會自動為頂點加上傾斜矩陣）
-    //if (gCfg.m_bFontItalic)
-    //{
-    //    cfg.GlyphSlanted = true;
-    //}
-    // ======================================
-
     std::string sFontPath = "C:\\Windows\\Fonts\\";
     std::string sFont = sFontPath + gCfg.m_sEnFont;
 
     // 檢查檔案是否存在，避免因設定錯誤字體導致崩潰
     ImFont* fontDefault = nullptr;
-    DWORD attrib = GetFileAttributesA(sFont.c_str());
-    if (attrib != INVALID_FILE_ATTRIBUTES && !(attrib & FILE_ATTRIBUTE_DIRECTORY))
-    {
-        fontDefault = io.Fonts->AddFontFromFileTTF(sFont.c_str(), fontSize, &cfg);
-
-        // 建議同時傳入簡中/繁中/日文的字元集範圍，避免中文變豆腐塊
-        // ImFont* fontDefault = io.Fonts->AddFontFromFileTTF(sFont.c_str(), fontSize, &cfg, io.Fonts->GetGlyphRangesChineseFull());
-    }
-    else
-    {
-        // 備用方案：如果設定的字體不小心不見了，改加載系統預設雅黑或內建字體
-        std::string sFallback = sFontPath + "msyh.ttc"; // 微軟雅黑
-        io.Fonts->AddFontFromFileTTF(sFallback.c_str(), fontSize, &cfg, io.Fonts->GetGlyphRangesChineseFull());
-    }
     
-    //fontSize -= 2;
-    ImFontConfig cfg1;
-    cfg1.OversampleH = 2;
-    cfg1.OversampleV = 2;
-    cfg1.MergeMode = true; 
-    cfg1.PixelSnapH = true;
-    cfg1.GlyphOffset.y = -1.f;
-    //io.Fonts->AddFontFromFileTTF( "C:\\Windows\\Fonts\\STHUPO.TTF", fontSize, &cfg1, io.Fonts->GetGlyphRangesChineseFull());
-    io.Fonts->AddFontFromFileTTF( "C:\\Windows\\Fonts\\msyhbd.ttc", fontSize, &cfg1, io.Fonts->GetGlyphRangesChineseFull());
+    for (int i = 0; i < 5; i++)
+    {
+        ImFont* font = nullptr;
+        float fs = fontSize - i * 2;
+        cfg.MergeMode = false;
+        cfg.GlyphOffset.y = 0;
+
+        DWORD attrib = GetFileAttributesA(sFont.c_str());
+        if (attrib != INVALID_FILE_ATTRIBUTES && !(attrib & FILE_ATTRIBUTE_DIRECTORY))
+        {
+            font = io.Fonts->AddFontFromFileTTF(sFont.c_str(), fs, &cfg);
+        }
+        else
+        {
+            std::string sFallback = sFontPath + "msyh.ttc"; // 微軟雅黑
+            font = io.Fonts->AddFontFromFileTTF(sFallback.c_str(), fs, &cfg, io.Fonts->GetGlyphRangesChineseFull());
+        }
+        if (i == 0)
+        {
+            fontDefault = font;
+        }
+        else
+        {
+            m_vFont.push_back(font);
+        }
+
+        cfg.MergeMode = true; 
+        cfg.GlyphOffset.y = -1.f;
+        io.Fonts->AddFontFromFileTTF( "C:\\Windows\\Fonts\\msyhbd.ttc", fs, &cfg, io.Fonts->GetGlyphRangesChineseFull());
+    }
     
     if (fontDefault != nullptr) {
         io.FontDefault = fontDefault; // 設置全局預設字體
     }
     else {
         // 如果加載失敗的防禦方案：使用系統預設
-        io.Fonts->AddFontDefault();
+        fontDefault = io.Fonts->AddFontDefault();
     }
 
-#if 0
-    {
-        float fontSize = 40;
-        // 1. 定義允許顯示的 Unicode 範圍 (必須以 0 結尾)
-        static const ImWchar my_ranges[] = {
-            0x0020, 0x00FF, // 基礎英文與數字
-            0x4E00, 0x9FFF, // 常用中文字 (為了顯示 "周日")
-            0x2400, 0x24FF, // 👈 關鍵：包含 ①②③④⑤⑥ 的 Unicode 區段
-            0
-        };
-        g_TitleTimeFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\courbd.ttf", fontSize, NULL, my_ranges);
-        // 3. 關鍵：設定合併組態
-        ImFontConfig config;
-        config.MergeMode = true;  // 👈 啟動合併模式，將下一個字型疊加到 g_TitleTimeFont
-        config.PixelSnapH = true;
-
-        // 4. 載入支援中文與帶圈數字的系統字型 (這裡使用微軟正黑體)
-        // ImGui 會自動用它來填補 courbd.ttf 裡面沒有的「周日」和「①②③」
-        io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\msyhbd.ttc", fontSize, &config, my_ranges);
-    }
-#endif
+    m_vFont.push_back(fontDefault);
 
     //  io.Fonts->Build();
 }

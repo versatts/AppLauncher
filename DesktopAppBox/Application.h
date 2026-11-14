@@ -1,6 +1,7 @@
 #pragma once
 #include "ImGuiObj.h"
 #include <d3d11.h>
+#include <vector>
 
 #define ENABLE_VIEWPORTS 1
 class Application
@@ -22,6 +23,9 @@ public:
 	void CleanupDeviceD3D();
 	void CreateRenderTarget();
 	void CleanupRenderTarget();
+
+
+	std::vector<ImFont*> m_vFont;
 };
 
 extern Application theApp;
