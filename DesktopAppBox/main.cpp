@@ -266,12 +266,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 localtime_s(&tm_now, &time_now);
                 char timeBuffer[64];
                 //std::strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d (%a) %H:%M:%S", &tm_now);
-                //static std::string arrWeek[7] = {"⑦", "①", "②", "③", "④", "⑤", "⑥"};
-                static std::string arrWeek[7] = {u8"周日", u8"周一", u8"周二", u8"周三", u8"周四", u8"周五", u8"周六"};
+                static std::string arrWeek[7] = {"⑦", "①", "②", "③", "④", "⑤", "⑥"};
+                //static std::string arrWeek[7] = {u8"周日", u8"周一", u8"周二", u8"周三", u8"周四", u8"周五", u8"周六"};
                 //std::strftime(timeBuffer, sizeof(timeBuffer), "%H:%M:%S", &tm_now);
                 //std::string timeStr = arrWeek[tm_now.tm_wday] + " - " + timeBuffer;
                 std::string timeStr0 = arrWeek[tm_now.tm_wday] + "   ";
-                std::string timeStr1 = "00:00:000";
+                std::string timeStr1 = "00:00";
                 std::string timeStrFull = timeStr0 + timeStr1;
                 const char* sTimeSymbol[] = { "0", ":" };
 
@@ -376,10 +376,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     ImVec2 textPos;
                     textPos.x = winPos.x + winWidth - textSizeFull.x - rightMargin;
                     textPos.y = winPos.y + (titleHeight - textSizeFull.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
-                    textPos.y -= 2;//L_TODO
+                    textPos.y -= 1;//L_TODO
+
+                    // 1. 只需把這兩個狀態/寬度宣告放在 Draw Week 之前
+                    static float secExpandProgress = 0.0f;
+                    static ImVec2 symSize0 = ImGui::CalcTextSize(sTimeSymbol[0]);
+                    static ImVec2 symSize1 = ImGui::CalcTextSize(sTimeSymbol[1]);
+                    const float secWidth = symSize1.x + symSize0.x * 2.0f; // ":SS" 的總寬度
 
                     //Draw Week
-                    drawList->AddText(textPos, color, timeStr0.c_str());
+                    ImVec2 weekPos = textPos;
+                    weekPos.x -= secWidth * secExpandProgress; // 直接跟著時間的展開進度向左移動
+                    weekPos.y -= 2;
+                    drawList->AddText(weekPos, color, timeStr0.c_str());
 
                     //Draw Time
                     {
@@ -399,9 +408,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                             float progress = 1.0f;
                         };
                         static DigitAnimation timeAnims[8];
-                        const float ANIM_DURATION = 0.15f; // 動畫持續時間 (秒)
+                        const float ANIM_DURATION = 0.15f; // 數字翻轉動畫持續時間 (秒)
 
-                        // 1. 每幀動態更新目標字串 (與你原本完全一致)
+                        // 秒數區塊展開/收合動畫進度與延遲停留計時器
+                        //static float secExpandProgress = 0.0f;
+                        static float secHoldTimer = 0.0f;      // 失去 Hover 後的剩餘停留秒數
+                        const float SEC_HOLD_DELAY = 3.0f;     // 停留時間：3 秒
+                        const float SEC_FADE_DURATION = 0.18f; // 展開/收合漸變時間
+
+                        // 1. 每幀動態更新目標字串
                         std::string arrTime[] = { "", "", ":", "", "", ":", "", "" };
                         arrTime[0] = std::to_string(tm_now.tm_hour / 10);
                         arrTime[1] = std::to_string(tm_now.tm_hour % 10);
@@ -411,30 +426,88 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                         arrTime[7] = std::to_string(tm_now.tm_sec % 10);
 
                         // 2. 寬度與高度快取
-                        static ImVec2 symSize0 = ImGui::CalcTextSize(sTimeSymbol[0]);
-                        static ImVec2 symSize1 = ImGui::CalcTextSize(sTimeSymbol[1]);
+                        //static ImVec2 symSize0 = ImGui::CalcTextSize(sTimeSymbol[0]);
+                        //static ImVec2 symSize1 = ImGui::CalcTextSize(sTimeSymbol[1]);
                         static float arrTimeLen[] = { symSize0.x, symSize0.x, symSize1.x, symSize0.x, symSize0.x, symSize1.x, symSize0.x, symSize0.x };
                         const float fontHeight = symSize0.y;
+
+                        // 計算「時:分 (HH:MM)」寬度與「:秒秒 (:SS)」寬度
+                        const float hmWidth = arrTimeLen[0] + arrTimeLen[1] + arrTimeLen[2] + arrTimeLen[3] + arrTimeLen[4];
+                        //const float secWidth = arrTimeLen[5] + arrTimeLen[6] + arrTimeLen[7];
 
                         // 3. 準備顏色與時間增量
                         float deltaTime = ImGui::GetIO().DeltaTime;
                         ImVec4 colVec = ImGui::ColorConvertU32ToFloat4(color);
 
-                        // 4. 標準 8 次排版循環 (無特殊化分支)
+                        // 4. 鎖定「右邊界基準點」，計算隨展開進度往左延伸的動態範圍
                         textPos.x += textSizeWeek.x;
+                        // 未展開時，HH:MM 佔據 [textPos.x, textPos.x + hmWidth]；此右邊界永遠固定不動
+                        const float rightAnchorX = textPos.x + hmWidth;
+
+                        // 當前實際佔用寬度（從 hmWidth 平滑過渡到 hmWidth + secWidth）
+                        float currentTotalWidth = hmWidth + secWidth * secExpandProgress;
+                        float currentLeftX = rightAnchorX - currentTotalWidth;
+
+                        // Hover 偵測範圍：未展開時僅為 HH:MM 寬度；展開時包含左側推開後的完整 HH:MM:SS 寬度
+                        ImVec2 timeRectMin(currentLeftX, textPos.y);
+                        ImVec2 timeRectMax(rightAnchorX, textPos.y + fontHeight);
+                        bool isTimeHovered = ImGui::IsMouseHoveringRect(timeRectMin, timeRectMax, false);
+
+                        // 更新停留計時器與展開/收合進度
+                        if (isTimeHovered)
+                        {
+                            secHoldTimer = SEC_HOLD_DELAY; // 只要處於 Hover，持續將停留時間刷新為 3 秒
+                        }
+                        else if (secHoldTimer > 0.0f)
+                        {
+                            secHoldTimer -= deltaTime;     // 離開 Hover 後開始倒數 3 秒
+                            if (secHoldTimer < 0.0f) secHoldTimer = 0.0f;
+                        }
+
+                        // 只要仍在 Hover 或 3 秒倒數尚未歸零，就保持展開狀態
+                        bool shouldShowSeconds = (isTimeHovered || secHoldTimer > 0.0f);
+                        if (shouldShowSeconds)
+                        {
+                            secExpandProgress += deltaTime / SEC_FADE_DURATION;
+                            if (secExpandProgress > 1.0f) secExpandProgress = 1.0f;
+                        }
+                        else
+                        {
+                            secExpandProgress -= deltaTime / SEC_FADE_DURATION;
+                            if (secExpandProgress < 0.0f) secExpandProgress = 0.0f;
+                        }
+
+                        // 5. 設定繪製起點為動態左起點（隨著 secExpandProgress 增加，整體平滑往左移動）
+                        textPos.x = currentLeftX;
+
                         for (int i = 0; i < 8; i++)
                         {
                             DigitAnimation& anim = timeAnims[i];
+                            bool isSecondPart = (i >= 5); // 索引 5, 6, 7 分別為 ':', 'S', 'S'
 
                             // 偵測該位置字串是否改變
                             if (arrTime[i] != anim.currentStr)
                             {
                                 anim.oldStr = anim.currentStr;
                                 anim.currentStr = arrTime[i];
-                                anim.progress = (anim.oldStr.empty()) ? 1.0f : 0.0f; // 首次載入不播動畫
+                                // 若秒數處於完全隱藏狀態，直接跳過舊數字翻轉動畫，確保展開時顯示最新秒數
+                                if (anim.oldStr.empty() || (isSecondPart && secExpandProgress <= 0.0f))
+                                    anim.progress = 1.0f;
+                                else
+                                    anim.progress = 0.0f;
                             }
 
-                            // 更新動畫進度
+                            // 若是秒數部分且完全收合，則不需繪製
+                            if (isSecondPart && secExpandProgress <= 0.0f)
+                            {
+                                continue;
+                            }
+
+                            // 秒數部分隨展開進度淡入（HH:MM 保持 100% 不透明，隨整體平滑左移）
+                            float partAlphaScale = isSecondPart ? secExpandProgress : 1.0f;
+                            ImU32 baseCol = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * partAlphaScale));
+
+                            // 更新數字翻轉動畫進度
                             if (anim.progress < 1.0f)
                             {
                                 anim.progress += deltaTime / ANIM_DURATION;
@@ -450,11 +523,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                                     const float MAX_OFFSET = fontHeight * 0.4f;
 
                                     // 舊數字：淡出，向下移動
-                                    ImU32 colOut = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * (1.0f - anim.progress)));
+                                    ImU32 colOut = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * partAlphaScale * (1.0f - anim.progress)));
                                     drawList->AddText(ImVec2(textPos.x, textPos.y + anim.progress * MAX_OFFSET), colOut, anim.oldStr.c_str());
 
                                     // 新數字：淡入，從上方滑下
-                                    ImU32 colIn = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * anim.progress));
+                                    ImU32 colIn = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * partAlphaScale * anim.progress));
                                     drawList->AddText(ImVec2(textPos.x, textPos.y + (anim.progress - 1.0f) * MAX_OFFSET), colIn, anim.currentStr.c_str());
                                 }
                                 else if (animType == TimeAnimType::Flip3D)
@@ -471,8 +544,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                                     {
                                         int vtx_idx_begin = drawList->VtxBuffer.Size;
 
-                                        // 計算淡入淡出透明度
-                                        float alpha = isIncoming ? halfP : (1.0f - halfP);
+                                        // 計算淡入淡出透明度（乘上秒數展開透明度）
+                                        float alpha = (isIncoming ? halfP : (1.0f - halfP)) * partAlphaScale;
                                         ImU32 fadingColor = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * alpha));
 
                                         // 先以正常比例畫出文字
@@ -494,13 +567,195 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                             else
                             {
                                 // ==================== 【靜態或動畫結束】 ====================
-                                drawList->AddText(textPos, color, anim.currentStr.c_str());
+                                drawList->AddText(textPos, baseCol, anim.currentStr.c_str());
+                            }
+
+                            // 移動 X 軸游標
+                            textPos.x += arrTimeLen[i];
+                        }
+                    }
+
+#if 0
+                    //Draw Time
+                    {
+                        // 1. 定義支援的動畫類型
+                        enum class TimeAnimType {
+                            SlideDown, // 下滑並淡出，新數字從上滑入
+                            Flip3D     // 3D 翻轉（繞水平軸垂直壓縮）
+                        };
+
+                        // 2. 控制變數：修改這個變數即可一鍵切換動畫效果！
+                        static TimeAnimType animType = TimeAnimType::SlideDown;
+
+                        // 3. 動態狀態結構 (維持 8 個位置)
+                        struct DigitAnimation {
+                            std::string currentStr = "";
+                            std::string oldStr = "";
+                            float progress = 1.0f;
+                        };
+                        static DigitAnimation timeAnims[8];
+                        const float ANIM_DURATION = 0.15f; // 數字翻轉動畫持續時間 (秒)
+
+                        // 秒數區塊展開/收合動畫進度與延遲停留計時器
+                        static float secExpandProgress = 0.0f;
+                        static float secHoldTimer = 0.0f;      // 失去 Hover 後的剩餘停留秒數
+                        const float SEC_HOLD_DELAY = 3.0f;     // 停留時間：3 秒
+                        const float SEC_FADE_DURATION = 0.18f; // 展開/收合漸變時間
+
+                        // 1. 每幀動態更新目標字串
+                        std::string arrTime[] = { "", "", ":", "", "", ":", "", "" };
+                        arrTime[0] = std::to_string(tm_now.tm_hour / 10);
+                        arrTime[1] = std::to_string(tm_now.tm_hour % 10);
+                        arrTime[3] = std::to_string(tm_now.tm_min / 10);
+                        arrTime[4] = std::to_string(tm_now.tm_min % 10);
+                        arrTime[6] = std::to_string(tm_now.tm_sec / 10);
+                        arrTime[7] = std::to_string(tm_now.tm_sec % 10);
+
+                        // 2. 寬度與高度快取
+                        static ImVec2 symSize0 = ImGui::CalcTextSize(sTimeSymbol[0]);
+                        static ImVec2 symSize1 = ImGui::CalcTextSize(sTimeSymbol[1]);
+                        static float arrTimeLen[] = { symSize0.x, symSize0.x, symSize1.x, symSize0.x, symSize0.x, symSize1.x, symSize0.x, symSize0.x };
+                        const float fontHeight = symSize0.y;
+
+                        // 計算「完整時間 (HH:MM:SS)」的固定總寬度
+                        const float fullWidth = arrTimeLen[0] + arrTimeLen[1] + arrTimeLen[2] + arrTimeLen[3] +
+                            arrTimeLen[4] + arrTimeLen[5] + arrTimeLen[6] + arrTimeLen[7];
+
+                        // 3. 準備顏色與時間增量
+                        float deltaTime = ImGui::GetIO().DeltaTime;
+                        ImVec4 colVec = ImGui::ColorConvertU32ToFloat4(color);
+
+                        // 4. 固定時間左起點，並以「完整時間寬度 (fullWidth)」作為永久 Hover 偵測範圍
+                        textPos.x += textSizeWeek.x;
+                        float timeStartX = textPos.x; // 記錄最左側基準點，確保展開時左邊界絕對不移動
+
+                        ImVec2 timeRectMin(timeStartX, textPos.y);
+                        ImVec2 timeRectMax(timeStartX + fullWidth, textPos.y + fontHeight);
+                        bool isTimeHovered = ImGui::IsMouseHoveringRect(timeRectMin, timeRectMax, false);
+
+                        // 更新停留計時器與展開/收合進度
+                        if (isTimeHovered)
+                        {
+                            secHoldTimer = SEC_HOLD_DELAY; // 只要處於 Hover，持續將停留時間刷新為 3 秒
+                        }
+                        else if (secHoldTimer > 0.0f)
+                        {
+                            secHoldTimer -= deltaTime;     // 離開 Hover 後開始倒數 3 秒
+                            if (secHoldTimer < 0.0f) secHoldTimer = 0.0f;
+                        }
+
+                        // 只要仍在 Hover 或 3 秒倒數尚未歸零，就保持展開狀態
+                        bool shouldShowSeconds = (isTimeHovered || secHoldTimer > 0.0f);
+                        if (shouldShowSeconds)
+                        {
+                            secExpandProgress += deltaTime / SEC_FADE_DURATION;
+                            if (secExpandProgress > 1.0f) secExpandProgress = 1.0f;
+                        }
+                        else
+                        {
+                            secExpandProgress -= deltaTime / SEC_FADE_DURATION;
+                            if (secExpandProgress < 0.0f) secExpandProgress = 0.0f;
+                        }
+
+                        // 5. 8 次排版循環
+                        for (int i = 0; i < 8; i++)
+                        {
+                            DigitAnimation& anim = timeAnims[i];
+                            bool isSecondPart = (i >= 5); // 索引 5, 6, 7 分別為 ':', 'S', 'S'
+
+                            // 偵測該位置字串是否改變
+                            if (arrTime[i] != anim.currentStr)
+                            {
+                                anim.oldStr = anim.currentStr;
+                                anim.currentStr = arrTime[i];
+                                // 若秒數處於完全隱藏狀態，直接跳過舊數字翻轉動畫，確保展開時顯示最新秒數
+                                if (anim.oldStr.empty() || (isSecondPart && secExpandProgress <= 0.0f))
+                                    anim.progress = 1.0f;
+                                else
+                                    anim.progress = 0.0f;
+                            }
+
+                            // 若是秒數部分且完全收合，則不需繪製（仍推進 textPos.x 保持整體座標一致性）
+                            if (isSecondPart && secExpandProgress <= 0.0f)
+                            {
+                                textPos.x += arrTimeLen[i];
+                                continue;
+                            }
+
+                            // 計算當前字元的透明度乘數與水平滑出位移
+                            float partAlphaScale = isSecondPart ? secExpandProgress : 1.0f;
+                            float slideOffsetX = isSecondPart ? ((1.0f - secExpandProgress) * -6.0f) : 0.0f;
+                            ImVec2 drawPos(textPos.x + slideOffsetX, textPos.y);
+                            ImU32 baseCol = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * partAlphaScale));
+
+                            // 更新數字翻轉動畫進度
+                            if (anim.progress < 1.0f)
+                            {
+                                anim.progress += deltaTime / ANIM_DURATION;
+                                if (anim.progress > 1.0f) anim.progress = 1.0f;
+                            }
+
+                            // 進行複合動畫繪製
+                            if (anim.progress < 1.0f)
+                            {
+                                if (animType == TimeAnimType::SlideDown)
+                                {
+                                    // ==================== 【模式一：下滑動畫】 ====================
+                                    const float MAX_OFFSET = fontHeight * 0.4f;
+
+                                    // 舊數字：淡出，向下移動
+                                    ImU32 colOut = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * partAlphaScale * (1.0f - anim.progress)));
+                                    drawList->AddText(ImVec2(drawPos.x, drawPos.y + anim.progress * MAX_OFFSET), colOut, anim.oldStr.c_str());
+
+                                    // 新數字：淡入，從上方滑下
+                                    ImU32 colIn = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * partAlphaScale * anim.progress));
+                                    drawList->AddText(ImVec2(drawPos.x, drawPos.y + (anim.progress - 1.0f) * MAX_OFFSET), colIn, anim.currentStr.c_str());
+                                }
+                                else if (animType == TimeAnimType::Flip3D)
+                                {
+                                    // ==================== 【模式二：3D 翻轉動畫】 ====================
+                                    bool isIncoming = (anim.progress >= 0.5f);
+                                    float halfP = isIncoming ? ((anim.progress - 0.5f) * 2.0f) : (anim.progress * 2.0f);
+                                    std::string drawStr = isIncoming ? anim.currentStr : anim.oldStr;
+
+                                    float angleRad = (isIncoming ? (1.0f - halfP) : halfP) * (3.14159265f / 2.0f);
+                                    float scaleY = cosf(angleRad);
+
+                                    if (scaleY > 0.0f && !drawStr.empty())
+                                    {
+                                        int vtx_idx_begin = drawList->VtxBuffer.Size;
+
+                                        // 計算淡入淡出透明度（乘上秒數展開透明度）
+                                        float alpha = (isIncoming ? halfP : (1.0f - halfP)) * partAlphaScale;
+                                        ImU32 fadingColor = ImGui::ColorConvertFloat4ToU32(ImVec4(colVec.x, colVec.y, colVec.z, colVec.w * alpha));
+
+                                        // 先以正常比例畫出文字
+                                        drawList->AddText(drawPos, fadingColor, drawStr.c_str());
+                                        int vtx_idx_end = drawList->VtxBuffer.Size;
+
+                                        // 透過頂點操作進行垂直壓縮 (寬度 100% 保持原樣)
+                                        if (vtx_idx_end > vtx_idx_begin)
+                                        {
+                                            float centerY = drawPos.y + fontHeight * 0.5f;
+                                            for (int v = vtx_idx_begin; v < vtx_idx_end; v++)
+                                            {
+                                                drawList->VtxBuffer[v].pos.y = centerY + (drawList->VtxBuffer[v].pos.y - centerY) * scaleY;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // ==================== 【靜態或動畫結束】 ====================
+                                drawList->AddText(drawPos, baseCol, anim.currentStr.c_str());
                             }
 
                             // 移動 X 軸游標 (寬度固定，不論任何動畫都不會抖動)
                             textPos.x += arrTimeLen[i];
                         }
                     }
+#endif
 #if 0
 #if 1
                     {
