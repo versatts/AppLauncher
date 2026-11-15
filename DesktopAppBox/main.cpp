@@ -376,7 +376,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     ImVec2 textPos;
                     textPos.x = winPos.x + winWidth - textSizeFull.x - rightMargin;
                     textPos.y = winPos.y + (titleHeight - textSizeFull.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
-                    textPos.y -= 1;//L_TODO
+                    textPos.y -= 1;//L_TODO make it configable
 
                     // 1. 只需把這兩個狀態/寬度宣告放在 Draw Week 之前
                     static float secExpandProgress = 0.0f;

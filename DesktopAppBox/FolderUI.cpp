@@ -811,9 +811,8 @@ bool FolderUI::ImageTextButton(
     if (show_text && label != nullptr)
     {
         if (text_font) ImGui::PushFont(text_font);
-        // 限制文字最大寬度與按鈕同寬，避免過長撐開佈局
         textSize = ImGui::CalcTextSize(label, nullptr, false, btnWidth);
-        textHeight = text_gap + ImGui::GetTextLineHeight(); // 或是使用 textSize.y 支援多行
+        textHeight = text_gap + ImGui::GetTextLineHeight();
         if (text_font) ImGui::PopFont();
     }
 
@@ -826,46 +825,77 @@ bool FolderUI::ImageTextButton(
     bool hovered = ImGui::IsItemHovered();
     bool active = ImGui::IsItemActive();
 
+    // 預先判斷滑鼠是否在下方文字區（供點擊與雙擊判定共用）
+    ImVec2 textAreaMin(pos.x, pos.y + btnHeight + text_gap);
+    ImVec2 textAreaMax(pos.x + btnWidth, pos.y + totalSize.y);
+    bool isMouseInText = (show_text && label != nullptr) ? ImGui::IsMouseHoveringRect(textAreaMin, textAreaMax) : false;
+
+    // 判斷是否點擊了「上方圖示按鈕區域」
+    bool iconClicked = pressed && !isMouseInText;
+
+    // 取得此元件專屬的 StateStorage（使用 PushID 避免 std::string 動態記憶體配置）
+    ImGui::PushID(str_id);
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    ImGuiID hoverStartTimeId = ImGui::GetID("hover_t");
+    ImGuiID bounceStartTimeId = ImGui::GetID("bounce_t");
+    ImGui::PopID();
+
+    float now = (float)ImGui::GetTime();
+
+    // 若點擊了圖示，記錄/重置跳動開始時間
+    if (iconClicked)
+    {
+        storage->SetFloat(bounceStartTimeId, now);
+    }
+
+    // --- 計算 3 秒跳動垂直偏移量 ---
+    float bounceOffsetY = 0.0f;
+    float bounceStartTime = storage->GetFloat(bounceStartTimeId, -10.0f);
+    float bounceElapsed = now - bounceStartTime;
+    const float BOUNCE_DURATION = 3.0f; // 跳動總持續時間：3 秒
+
+    if (bounceElapsed >= 0.0f && bounceElapsed < BOUNCE_DURATION)
+    {
+        // 動畫參數：
+        // maxJumpHeight: 最高跳起像素高度（預設為圖示高度的 22%）
+        // bounceFreq:    跳動頻率（3 秒內約彈跳 5~6 次）
+        // decay:         阻尼衰減係數，讓跳動幅度隨時間自然變小直到平穩停止
+        const float maxJumpHeight = icon_size.y * 0.22f;
+        const float bounceFreq = 6.0f;
+        const float decay = 1.1f;
+
+        float wave = fabsf(sinf(bounceElapsed * bounceFreq));
+        float damping = expf(-bounceElapsed * decay) * (1.0f - bounceElapsed / BOUNCE_DURATION);
+        bounceOffsetY = -maxJumpHeight * wave * damping; // 負值代表向上跳起
+    }
+
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-    // 4. 繪製上方圖示按鈕的背景框（Hover 整個區域時都會高亮）
-    ImVec2 btnMax(pos.x + btnWidth, pos.y + btnHeight);
+    // 4. 繪製上方圖示按鈕的背景框（套用跳動偏移 bounceOffsetY）
+    ImVec2 btnMin(pos.x, pos.y + bounceOffsetY);
+    ImVec2 btnMax(pos.x + btnWidth, pos.y + btnHeight + bounceOffsetY);
     ImU32 bgCol = ImGui::GetColorU32(
         active ? ImGuiCol_ButtonActive :
         hovered ? ImGuiCol_ButtonHovered :
         ImGuiCol_Button
     );
-    drawList->AddRectFilled(pos, btnMax, bgCol, (float)(padding * 2));
+    drawList->AddRectFilled(btnMin, btnMax, bgCol, (float)(padding * 2));
 
-    // 5. 繪製應用程式圖示
-    ImVec2 imgMin(pos.x + padding, pos.y + padding);
+    // 5. 繪製應用程式圖示（同步套用跳動偏移 bounceOffsetY）
+    ImVec2 imgMin(pos.x + padding, pos.y + padding + bounceOffsetY);
     ImVec2 imgMax(imgMin.x + icon_size.x, imgMin.y + icon_size.y);
     drawList->AddImage(user_texture_id, imgMin, imgMax);
 
     // 6. 繪製下方文字與偵測文字區雙擊
     if (out_text_double_clicked) *out_text_double_clicked = false;
 
-    bool isMouseInText = false;
     if (show_text && label != nullptr)
     {
         if (text_font) ImGui::PushFont(text_font);
 
-        ImVec2 textAreaMin(pos.x, btnMax.y + text_gap);
-        ImVec2 textAreaMax(pos.x + btnWidth, pos.y + totalSize.y);
-
         // 計算「完整文字」的實際寬度，用來判斷是否超出按鈕寬度
         ImVec2 fullTextSize = ImGui::CalcTextSize(label);
         bool isOverflow = (fullTextSize.x > btnWidth);
-
-        // 取得此元件專屬的 StateStorage，用於記錄 Hover 開始時間
-        ImGuiStorage* storage = ImGui::GetStateStorage();
-        ImGuiID hoverStartTimeId = ImGui::GetID((std::string(str_id) + "_hover_t").c_str());
-
-        // 水平置中計算（若文字超過按鈕寬度則靠左並裁切）
-        std::string finalName = TruncateUtf8WithEllipsis(label, btnWidth);
-        textSize = ImGui::CalcTextSize(finalName.c_str());
-        float drawX = pos.x + (btnWidth - textSize.x) * 0.5f;
-        if (drawX < pos.x) drawX = pos.x;
 
         ImU32 textCol = ImGui::GetColorU32(ImGuiCol_Text);
         // 使用 ClipRect 防止超長檔名溢出到隔壁格子
@@ -873,10 +903,8 @@ bool FolderUI::ImageTextButton(
 
         if (hovered && isOverflow)
         {
-            float now = (float)ImGui::GetTime();
             float startTime = storage->GetFloat(hoverStartTimeId, -1.0f);
 
-            // 剛開始 Hover 時，記錄起始時間
             if (startTime < 0.0f)
             {
                 startTime = now;
@@ -885,43 +913,36 @@ bool FolderUI::ImageTextButton(
 
             float elapsed = now - startTime;
 
-            // --- 跑馬燈動畫參數設定 ---
-            const float scrollSpeed = 35.0f;    // 滾動速度（像素/秒）
-            const float pauseStart = 0.6f;     // 開頭停頓時間（秒）
-            const float pauseEnd = 1.0f;     // 滾到底部後的停頓時間（秒）
+            const float scrollSpeed = 35.0f;
+            const float pauseStart = 0.6f;
+            const float pauseEnd = 1.0f;
 
-            float maxOffset = fullTextSize.x - btnWidth; // 最大需要向左偏移的距離
+            float maxOffset = fullTextSize.x - btnWidth;
             float scrollDuration = maxOffset / scrollSpeed;
             float totalCycle = pauseStart + scrollDuration + pauseEnd;
 
-            // 計算當前週期內的時間進度
             float cycleTime = fmodf(elapsed, totalCycle);
             float offsetX = 0.0f;
 
             if (cycleTime < pauseStart)
             {
-                // 階段 1：開頭停頓，讓使用者先看清前幾個字
                 offsetX = 0.0f;
             }
             else if (cycleTime < pauseStart + scrollDuration)
             {
-                // 階段 2：線性向左移動（視覺上文字從右往左滑入，顯示後半段）
                 float t = (cycleTime - pauseStart) / scrollDuration;
                 offsetX = t * maxOffset;
             }
             else
             {
-                // 階段 3：停留在最末端，讓使用者看清結尾
                 offsetX = maxOffset;
             }
 
-            // 注意：要看到右側被裁掉的文字，繪製座標必須「向左（負方向）」偏移
             float drawX = pos.x - offsetX;
             drawList->AddText(ImVec2(drawX, textAreaMin.y), textCol, label);
         }
         else
         {
-            // 未 Hover 或文字未超出寬度時：清除計時器，恢復靜態顯示
             storage->SetFloat(hoverStartTimeId, -1.0f);
 
             std::string finalName = TruncateUtf8WithEllipsis(label, btnWidth);
@@ -934,7 +955,6 @@ bool FolderUI::ImageTextButton(
 
         drawList->PopClipRect();
 
-        isMouseInText = ImGui::IsMouseHoveringRect(textAreaMin, textAreaMax);
         // 偵測滑鼠是否在「下方文字區」雙擊左鍵
         if (out_text_double_clicked && hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         {
@@ -947,7 +967,6 @@ bool FolderUI::ImageTextButton(
         if (text_font) ImGui::PopFont();
     }
 
-    // 關鍵修正：只有點擊「圖示按鈕區域」才回傳 pressed = true；
-// 點擊或雙擊「下方文字區域」不會觸發啟動程式！
-    return pressed && !isMouseInText;
+    return iconClicked;
 }
+
