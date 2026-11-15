@@ -853,6 +853,14 @@ bool FolderUI::ImageTextButton(
         ImVec2 textAreaMin(pos.x, btnMax.y + text_gap);
         ImVec2 textAreaMax(pos.x + btnWidth, pos.y + totalSize.y);
 
+        // 計算「完整文字」的實際寬度，用來判斷是否超出按鈕寬度
+        ImVec2 fullTextSize = ImGui::CalcTextSize(label);
+        bool isOverflow = (fullTextSize.x > btnWidth);
+
+        // 取得此元件專屬的 StateStorage，用於記錄 Hover 開始時間
+        ImGuiStorage* storage = ImGui::GetStateStorage();
+        ImGuiID hoverStartTimeId = ImGui::GetID((std::string(str_id) + "_hover_t").c_str());
+
         // 水平置中計算（若文字超過按鈕寬度則靠左並裁切）
         std::string finalName = TruncateUtf8WithEllipsis(label, btnWidth);
         textSize = ImGui::CalcTextSize(finalName.c_str());
@@ -863,15 +871,66 @@ bool FolderUI::ImageTextButton(
         // 使用 ClipRect 防止超長檔名溢出到隔壁格子
         drawList->PushClipRect(textAreaMin, textAreaMax, true);
 
-        drawList->AddText(ImVec2(drawX, textAreaMin.y), textCol, finalName.c_str());
-        
-        if (hovered)
+        if (hovered && isOverflow)
         {
+            float now = (float)ImGui::GetTime();
+            float startTime = storage->GetFloat(hoverStartTimeId, -1.0f);
 
+            // 剛開始 Hover 時，記錄起始時間
+            if (startTime < 0.0f)
+            {
+                startTime = now;
+                storage->SetFloat(hoverStartTimeId, startTime);
+            }
+
+            float elapsed = now - startTime;
+
+            // --- 跑馬燈動畫參數設定 ---
+            const float scrollSpeed = 35.0f;    // 滾動速度（像素/秒）
+            const float pauseStart = 0.6f;     // 開頭停頓時間（秒）
+            const float pauseEnd = 1.0f;     // 滾到底部後的停頓時間（秒）
+
+            float maxOffset = fullTextSize.x - btnWidth; // 最大需要向左偏移的距離
+            float scrollDuration = maxOffset / scrollSpeed;
+            float totalCycle = pauseStart + scrollDuration + pauseEnd;
+
+            // 計算當前週期內的時間進度
+            float cycleTime = fmodf(elapsed, totalCycle);
+            float offsetX = 0.0f;
+
+            if (cycleTime < pauseStart)
+            {
+                // 階段 1：開頭停頓，讓使用者先看清前幾個字
+                offsetX = 0.0f;
+            }
+            else if (cycleTime < pauseStart + scrollDuration)
+            {
+                // 階段 2：線性向左移動（視覺上文字從右往左滑入，顯示後半段）
+                float t = (cycleTime - pauseStart) / scrollDuration;
+                offsetX = t * maxOffset;
+            }
+            else
+            {
+                // 階段 3：停留在最末端，讓使用者看清結尾
+                offsetX = maxOffset;
+            }
+
+            // 注意：要看到右側被裁掉的文字，繪製座標必須「向左（負方向）」偏移
+            float drawX = pos.x - offsetX;
+            drawList->AddText(ImVec2(drawX, textAreaMin.y), textCol, label);
         }
-       
+        else
+        {
+            // 未 Hover 或文字未超出寬度時：清除計時器，恢復靜態顯示
+            storage->SetFloat(hoverStartTimeId, -1.0f);
 
+            std::string finalName = TruncateUtf8WithEllipsis(label, btnWidth);
+            textSize = ImGui::CalcTextSize(finalName.c_str());
+            float drawX = pos.x + (btnWidth - textSize.x) * 0.5f;
+            if (drawX < pos.x) drawX = pos.x;
 
+            drawList->AddText(ImVec2(drawX, textAreaMin.y), textCol, finalName.c_str());
+        }
 
         drawList->PopClipRect();
 
