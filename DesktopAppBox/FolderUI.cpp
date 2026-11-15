@@ -98,6 +98,11 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
     // UTF-8 安全截斷：超出 maxWidth 時保留完整多位元組字元並補 "..."
     std::string FolderUI::TruncateUtf8WithEllipsis(const std::string& text, float maxWidth)
     {
+        if (ImGui::CalcTextSize(text.c_str()).x <= maxWidth)
+        {
+            return text;
+        }
+
         const std::string ellipsis3 = "...";
         const std::string ellipsis2 = "..";
         float ellipsisWidth = ImGui::CalcTextSize(ellipsis3.c_str()).x;
@@ -146,7 +151,6 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
 
         bool isEditing = (s_editingIdx == (int)itemIdx);
         bool textDoubleClicked = false;
-
         // 編輯態時，按鈕本身不畫文字（show_text = false），改由下方 InputText 接手
         bool clicked = ImageTextButton(
             btnId,
@@ -155,8 +159,8 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
             padding,
             g.bShowText && !isEditing,
             app.sDisplay.c_str(),
-            theApp.m_vFont[2],
-            padding * 1.3f,
+            theApp.m_vFont[3],
+            g.textGap,//padding * 1.3f,
             &textDoubleClicked
         );
 
@@ -234,7 +238,7 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         // 3. 若處於編輯態，在圖示下方直接渲染 InputText
         if (g.bShowText && isEditing)
         {
-            ImGui::PushFont(theApp.m_vFont[2]);
+            ImGui::PushFont(theApp.m_vFont[3]);
             ImGui::SetNextItemWidth(g.iconSize.x + padding * 2.0f);
 
             if (s_justStartedEdit)
@@ -850,13 +854,25 @@ bool FolderUI::ImageTextButton(
         ImVec2 textAreaMax(pos.x + btnWidth, pos.y + totalSize.y);
 
         // 水平置中計算（若文字超過按鈕寬度則靠左並裁切）
+        std::string finalName = TruncateUtf8WithEllipsis(label, btnWidth);
+        textSize = ImGui::CalcTextSize(finalName.c_str());
         float drawX = pos.x + (btnWidth - textSize.x) * 0.5f;
         if (drawX < pos.x) drawX = pos.x;
 
         ImU32 textCol = ImGui::GetColorU32(ImGuiCol_Text);
         // 使用 ClipRect 防止超長檔名溢出到隔壁格子
         drawList->PushClipRect(textAreaMin, textAreaMax, true);
-        drawList->AddText(ImVec2(drawX, textAreaMin.y), textCol, label);
+
+        drawList->AddText(ImVec2(drawX, textAreaMin.y), textCol, finalName.c_str());
+        
+        if (hovered)
+        {
+
+        }
+       
+
+
+
         drawList->PopClipRect();
 
         isMouseInText = ImGui::IsMouseHoveringRect(textAreaMin, textAreaMax);

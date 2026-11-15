@@ -255,6 +255,10 @@ void Application::InitImGuiContext(float fScale)
     std::string sFontPath = "C:\\Windows\\Fonts\\";
     std::string sFont = sFontPath + gCfg.m_sEnFont;
 
+    std::string sFallback = sFontPath + "msyhbd.ttc"; // 微軟雅黑
+    ImFont* font0 = io.Fonts->AddFontFromFileTTF(sFallback.c_str(), fontSize, &cfg, io.Fonts->GetGlyphRangesChineseFull());
+    m_vFont.push_back(font0);
+
     // 檢查檔案是否存在，避免因設定錯誤字體導致崩潰
     ImFont* fontDefault = nullptr;
     
@@ -272,7 +276,7 @@ void Application::InitImGuiContext(float fScale)
         }
         else
         {
-            std::string sFallback = sFontPath + "msyh.ttc"; // 微軟雅黑
+            std::string sFallback = sFontPath + "msyhbd.ttc"; // 微軟雅黑
             font = io.Fonts->AddFontFromFileTTF(sFallback.c_str(), fs, &cfg, io.Fonts->GetGlyphRangesChineseFull());
         }
         if (i == 0)

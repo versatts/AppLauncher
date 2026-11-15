@@ -2,7 +2,7 @@
 #include "link.h"     // StripOrderPrefix（TAB 顯示名去掉 "NNNN-" 排序前綴）
 #include <windows.h>
 #include "AppConfig.h"
-
+#include "Application.h"
 void SettingUI::Render(bool& openSetModal)
 {
      // 3. 觸發與渲染模態視窗（必須與 Button 分開處理）
@@ -13,6 +13,7 @@ void SettingUI::Render(bool& openSetModal)
     }
 
     // 開始繪製模態視窗
+    ImGui::PushFont(theApp.m_vFont[0]);
     if (ImGui::BeginPopupModal("SetModalPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Checkbox("启用拖动", &gCfg.m_bEnableFileDragIO);
@@ -86,6 +87,7 @@ void SettingUI::Render(bool& openSetModal)
 
         ImGui::EndPopup();
     }
+    ImGui::PopFont();
 
 
 }
