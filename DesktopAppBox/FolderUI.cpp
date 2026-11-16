@@ -3,6 +3,7 @@
 #include "link.h"    // StripOrderPrefix（改名時保留排序前綴）
 #include "AppConfig.h"
 #include "Application.h"
+#include <thread>
 // 來自 main.cpp：檔案拖入/拖出功能總開關
 extern AppConfig gCfg;
 // 來自 main.cpp：拖出確認後刪除 lnk 檔案，並排隊幀末熱重載當前分頁
@@ -175,18 +176,55 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         else if (clicked)
         {
             s_editingIdx = -1;
-
+#if 0
             const wchar_t* pArgs = (app.exeArgsBuf != L'\0') ? app.exeArgsBuf : nullptr;
             const wchar_t* pSlash = wcsrchr(app.exePathBuf, L'\\');
             if (pSlash)
             {
                 std::wstring workDir(app.exePathBuf, pSlash - app.exePathBuf);
+
                 ShellExecuteW(hwnd, L"open", app.sLnkPath.c_str(), pArgs, workDir.c_str(), SW_SHOW);
             }
             else
             {
                 ShellExecuteW(hwnd, L"open", app.exePathBuf, pArgs, nullptr, SW_SHOW);
             }
+#endif
+            // 1. 在主執行緒安全複製字串（注意：判斷第一個字元是否為 L'\0' 需加上）
+            std::wstring args = (app.exeArgsBuf[0] != L'\0') ? app.exeArgsBuf : L"";
+            std::wstring targetPath;
+            std::wstring workDir;
+
+            const wchar_t* pSlash = wcsrchr(app.exePathBuf, L'\\');
+            if (pSlash)
+            {
+                workDir.assign(app.exePathBuf, pSlash - app.exePathBuf);
+                targetPath = app.sLnkPath;
+            }
+            else
+            {
+                targetPath = app.exePathBuf;
+            }
+
+            // 2. 使用移動/值捕獲啟動獨立背景執行緒，完全不依賴外部 ST_APP& app 的生命週期
+            std::thread([targetPath = std::move(targetPath),
+                args = std::move(args),
+                workDir = std::move(workDir)]()
+                {
+                    // 背景執行緒呼叫 ShellExecuteW 解析 .lnk 捷徑前，必須先初始化 COM
+                    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+                    const wchar_t* pArgs = args.empty() ? nullptr : args.c_str();
+                    const wchar_t* pWorkDir = workDir.empty() ? nullptr : workDir.c_str();
+
+                    // 背景執行緒中建議傳入 nullptr 作為 hwnd，避免跨執行緒視窗訊息阻塞或 UAC 焦點異常
+                    ShellExecuteW(nullptr, L"open", targetPath.c_str(), pArgs, pWorkDir, SW_SHOW);
+
+                    if (SUCCEEDED(hr))
+                    {
+                        CoUninitialize();
+                    }
+                }).detach();
         }
 
         // 1. 拖曳來源 (Source) —— 直接綁定在上面的 ImageTextButton 上
@@ -901,7 +939,7 @@ bool FolderUI::ImageTextButton(
         // 使用 ClipRect 防止超長檔名溢出到隔壁格子
         drawList->PushClipRect(textAreaMin, textAreaMax, true);
 
-        if (hovered && isOverflow)
+        if (hovered && isMouseInText && isOverflow)
         {
             float startTime = storage->GetFloat(hoverStartTimeId, -1.0f);
 
