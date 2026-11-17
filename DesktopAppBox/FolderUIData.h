@@ -20,6 +20,8 @@ struct ST_APP
     std::string sDisplay;
     std::string sPath;
     std::wstring sLnkPath;   // 拖出用：lnk 資料夾中該捷徑檔案的完整原始路徑
+
+    float bounceStartTime = -10.0f; // 記錄此圖示點擊跳動的起始時間
 };
 
 struct ST_FOLDER

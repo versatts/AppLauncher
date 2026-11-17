@@ -162,7 +162,7 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
             app.sDisplay.c_str(),
             theApp.m_vFont[3],
             g.textGap,//padding * 1.3f,
-            &textDoubleClicked
+            &textDoubleClicked, &app.bounceStartTime
         );
 
         // 雙擊文字區：進入編輯態（不觸發程式啟動）
@@ -285,6 +285,12 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
                 s_justStartedEdit = false;
             }
 
+            //为什么要加以下三行才能得到正确x位置？
+            ImVec2 pos = ImGui::GetCursorScreenPos();
+            pos.x += g.dynamicPadding;
+            pos.x += (g.btnSize.x + g.itemSpacingX * 2) * (itemIdx % g.maxItemsPerRow);
+
+            ImGui::SetCursorScreenPos(pos);
             ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
             bool enterPressed = ImGui::InputText("##rename_input", s_renameBuf, sizeof(s_renameBuf), flags);
             bool escPressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
@@ -297,6 +303,8 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
                     app.sDisplay = s_renameBuf;
                 }
                 s_editingIdx = -1;
+
+                ApplyItemRename(app, app.sDisplay.c_str());
             }
             else if (escPressed)
             {
@@ -833,7 +841,8 @@ bool FolderUI::ImageTextButton(
     const char* label,
     ImFont* text_font,
     float text_gap,
-    bool* out_text_double_clicked)
+    bool* out_text_double_clicked,
+    float* p_bounce_start_time)
 {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (window->SkipItems)
@@ -886,6 +895,7 @@ bool FolderUI::ImageTextButton(
         storage->SetFloat(bounceStartTimeId, now);
     }
 
+#if 0
     // --- 計算 3 秒跳動垂直偏移量 ---
     float bounceOffsetY = 0.0f;
     float bounceStartTime = storage->GetFloat(bounceStartTimeId, -10.0f);
@@ -905,6 +915,30 @@ bool FolderUI::ImageTextButton(
         float wave = fabsf(sinf(bounceElapsed * bounceFreq));
         float damping = expf(-bounceElapsed * decay) * (1.0f - bounceElapsed / BOUNCE_DURATION);
         bounceOffsetY = -maxJumpHeight * wave * damping; // 負值代表向上跳起
+    }
+#endif
+    // --- 計算 3 秒跳動垂直偏移量（獨立狀態，互不干擾） ---
+    float bounceOffsetY = 0.0f;
+    if (p_bounce_start_time != nullptr)
+    {
+        if (iconClicked)
+        {
+            *p_bounce_start_time = now;
+        }
+
+        float bounceElapsed = now - (*p_bounce_start_time);
+        const float BOUNCE_DURATION = 3.0f;
+
+        if (bounceElapsed >= 0.0f && bounceElapsed < BOUNCE_DURATION)
+        {
+            const float maxJumpHeight = icon_size.y * 0.22f;
+            const float bounceFreq = 6.0f;
+            const float decay = 1.1f;
+
+            float wave = fabsf(sinf(bounceElapsed * bounceFreq));
+            float damping = expf(-bounceElapsed * decay) * (1.0f - bounceElapsed / BOUNCE_DURATION);
+            bounceOffsetY = -maxJumpHeight * wave * damping;
+        }
     }
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();

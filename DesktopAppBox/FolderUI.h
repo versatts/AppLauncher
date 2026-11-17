@@ -92,6 +92,7 @@ private:
         const char* label,
         ImFont* text_font,
         float text_gap,
-        bool* out_text_double_clicked = nullptr);
+        bool* out_text_double_clicked = nullptr,
+        float* p_bounce_start_time = nullptr);
  
 };
