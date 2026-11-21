@@ -28,6 +28,7 @@
 // 內部結構宣告，用於折疊時同步修改 ImGui 快取
 #include <imgui_internal.h>
 
+#include "Hook.h"
 // 在全域宣告一組變數用來保存最後一刻的視窗幾何資訊
 static int g_FinalWinX = 0, g_FinalWinY = 0, g_FinalWinW = 0, g_FinalWinH = 0;
 static bool g_HasFinalGeometry = false;
@@ -56,7 +57,7 @@ ResLoader gRes;
 // 全局幾何變數
 static int g_OSWinH = 0;          // 折疊前的"完整" ImGui 高度，供恢復用
 bool isCollapsed = false;
-static HWND g_hwnd = nullptr;      // Win32 Host 窗口 HWND
+HWND g_hwnd = nullptr;      // Win32 Host 窗口 HWND
 
 static constexpr int DEFAULT_IMGUI_W = 600;
 static constexpr int DEFAULT_IMGUI_H = 400;
@@ -146,12 +147,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     MARGINS margins = { -1, -1, -1, -1 };
     ::DwmExtendFrameIntoClientArea(hwnd, &margins);
 
+#if 0
     //显示桌面时不会被隐藏
     if (HWND hProgman = ::FindWindowW(L"Progman", L"Program Manager"))
     {
         ::SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, (LONG_PTR)hProgman);
     }
-
+#endif
 
     if (!theApp.CreateDeviceD3D(hwnd))
     {
@@ -166,7 +168,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     g_SwapChainOccluded = theApp.g_SwapChainOccluded;
 
     gRes.m_pDevice = g_pd3dDevice;
-
+#if 0
+    gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\shell32.dll", 64);
+    gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\imageres.dll", 64);
+    gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\ddores.dll", 64);
+    gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\wmploc.dll", 64);
+    gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\mmcndmgr.dll", 64);
+    gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\netshell.dll", 64);
+    gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\setupapi.dll", 64);
+    gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\compstui.dll", 64);
+#endif
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
 
@@ -187,6 +198,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4 clear_color = ImVec4(1.0f, 1.0f, 1.0f, 0.0f);
+
+
+    // 註冊全域系統前景視窗變化監聽 (不需要 DLL 注入，純進程內訊息迴圈接收)
+    HWINEVENTHOOK hEventHook = ::SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+        nullptr, WinEventProc, 0, 0,
+        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
+    );
+
+    // 程式啟動時先沉到最底層
+    ::SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
 
     bool done = false;
     while (!done)
@@ -270,7 +293,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 //static std::string arrWeek[7] = {u8"周日", u8"周一", u8"周二", u8"周三", u8"周四", u8"周五", u8"周六"};
                 //std::strftime(timeBuffer, sizeof(timeBuffer), "%H:%M:%S", &tm_now);
                 //std::string timeStr = arrWeek[tm_now.tm_wday] + " - " + timeBuffer;
-                std::string timeStr0 = arrWeek[tm_now.tm_wday] + "   ";
+                std::string timeStr0 = arrWeek[tm_now.tm_wday] + " ";
                 std::string timeStr1 = "00:00";
                 std::string timeStrFull = timeStr0 + timeStr1;
                 const char* sTimeSymbol[] = { "0", ":" };
@@ -376,7 +399,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     ImVec2 textPos;
                     textPos.x = winPos.x + winWidth - textSizeFull.x - rightMargin;
                     textPos.y = winPos.y + (titleHeight - textSizeFull.y) * 0.5f + ImGui::GetStyle().FramePadding.y / 2;
-                    textPos.y -= 1;//L_TODO make it configable
+                    textPos.y -= 3;//L_TODO make it configable
 
                     // 1. 只需把這兩個狀態/寬度宣告放在 Draw Week 之前
                     static float secExpandProgress = 0.0f;
@@ -1040,6 +1063,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             g_pendingReloadIdx = -1;
         }
     }
+
+    // 迴圈結束後釋放鉤子
+    if (hEventHook)
+    {
+        ::UnhookWinEvent(hEventHook);
+    }
+
     gFUD.PersistOrder();
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();

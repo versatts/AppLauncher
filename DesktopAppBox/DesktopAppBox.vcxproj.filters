@@ -24,6 +24,7 @@
     <ClInclude Include="..\ImGuiCustom\CustomUI.h">
       <Filter>ImGuiCustom</Filter>
     </ClInclude>
+    <ClInclude Include="Hook.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -43,6 +44,7 @@
     <ClCompile Include="..\ImGuiCustom\CustomUI.cpp">
       <Filter>ImGuiCustom</Filter>
     </ClCompile>
+    <ClCompile Include="Hook.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.txt" />
