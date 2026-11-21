@@ -168,13 +168,18 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
             &textDoubleClicked, &app.bounceStartTime
         );
 
-        // 雙擊文字區：進入編輯態（不觸發程式啟動）
+        static int s_editFrames = 0;
+
         if (textDoubleClicked)
         {
             s_editingIdx = (int)itemIdx;
-            s_justStartedEdit = true;
+            s_editFrames = 0;
             strncpy_s(s_renameBuf, sizeof(s_renameBuf), app.sDisplay.c_str(), _TRUNCATE);
+
+            ::SetForegroundWindow(hwnd);
+            ::SetFocus(hwnd);
         }
+
         // 單擊按鈕（且非雙擊文字）：啟動目標程式
         else if (clicked)
         {
@@ -282,36 +287,37 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
             ImGui::PushFont(theApp.m_vFont[3]);
             ImGui::SetNextItemWidth(g.iconSize.x + padding * 2.0f);
 
-            if (s_justStartedEdit)
+            if (s_editFrames == 1)
             {
                 ImGui::SetKeyboardFocusHere();
-                s_justStartedEdit = false;
             }
 
-            //为什么要加以下三行才能得到正确x位置？
             ImVec2 pos = ImGui::GetCursorScreenPos();
             pos.x += g.dynamicPadding;
             pos.x += (g.btnSize.x + g.itemSpacingX * 2) * (itemIdx % g.maxItemsPerRow);
-
             ImGui::SetCursorScreenPos(pos);
+
             ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
             bool enterPressed = ImGui::InputText("##rename_input", s_renameBuf, sizeof(s_renameBuf), flags);
             bool escPressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
-            bool deactivated = ImGui::IsItemDeactivated();
+            bool deactivated = (s_editFrames > 1) && ImGui::IsItemDeactivated();
 
             if (enterPressed || (deactivated && !escPressed))
             {
-                if (s_renameBuf != '\0')
+                if (s_renameBuf[0] != '\0')
                 {
                     app.sDisplay = s_renameBuf;
                 }
                 s_editingIdx = -1;
-
                 ApplyItemRename(app, app.sDisplay.c_str());
             }
             else if (escPressed)
             {
                 s_editingIdx = -1;
+            }
+            else
+            {
+                s_editFrames++;
             }
             ImGui::PopFont();
         }
