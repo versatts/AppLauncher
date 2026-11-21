@@ -48,7 +48,7 @@ public:
     void PersistOrder();
     std::vector<ST_FOLDER> gvFolder;
     std::vector<ST_APP>* gpvApp = nullptr;
-    std::vector<std::wstring> gvFolderName;
+    std::vector<std::wstring> m_vTabName;
 
     int* m_pIdx = nullptr;
     bool m_bShowName = true;

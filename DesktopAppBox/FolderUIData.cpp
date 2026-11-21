@@ -18,7 +18,7 @@ void FolderUIData::Init(ID3D11Device* pd3dDevice, ResLoader* pRL)
         folder0.sName = _T("Useful");
         MakeOneFolder(pd3dDevice, pRL, lnkList, folder0);
         gvFolder.push_back(folder0);
-        gvFolderName.push_back(folder0.sName);
+        m_vTabName.push_back(folder0.sName);
         gpvApp = &(gvFolder[0].vApp);
     }
 
@@ -30,10 +30,10 @@ void FolderUIData::Init(ID3D11Device* pd3dDevice, ResLoader* pRL)
         auto lnkList = EnumLnkFilesInAppDir(fx, vEmpty);
         MakeOneFolder(pd3dDevice, pRL, lnkList, folderx);
         gvFolder.push_back(folderx);
-        gvFolderName.push_back(folderx.sName);
+        m_vTabName.push_back(folderx.sName);
     }
 
- 
+    m_vTabName.push_back(_T("SET"));
 }
 
 bool FolderUIData::ReloadFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, int idx)
@@ -47,7 +47,7 @@ bool FolderUIData::ReloadFolder(ID3D11Device* pd3dDevice, ResLoader* pRL, int id
     std::wstring subDir;
     if (idx > 0)
     {
-        subDir = gvFolderName[idx];
+        subDir = m_vTabName[idx];
     }
 
     std::vector<std::wstring> vIgnore; // 子目錄列表此處不需要
@@ -73,13 +73,13 @@ void FolderUIData::MoveFolder(int from, int to)
         return;
     }
 
-    // 同步搬移資料與目錄名（保持 gvFolder[i] ↔ gvFolderName[i] 對應）
+    // 同步搬移資料與目錄名（保持 gvFolder[i] ↔ m_vTabName[i] 對應）
     ST_FOLDER movedFolder = std::move(gvFolder[from]);
-    std::wstring movedName = std::move(gvFolderName[from]);
+    std::wstring movedName = std::move(m_vTabName[from]);
     gvFolder.erase(gvFolder.begin() + from);
-    gvFolderName.erase(gvFolderName.begin() + from);
+    m_vTabName.erase(m_vTabName.begin() + from);
     gvFolder.insert(gvFolder.begin() + to, std::move(movedFolder));
-    gvFolderName.insert(gvFolderName.begin() + to, std::move(movedName));
+    m_vTabName.insert(m_vTabName.begin() + to, std::move(movedName));
 
     // 修正當前選中分頁索引（m_pIdx 指向 TabHeadUI::m_Idx）：
     // 拖了哪個分頁就顯示哪個。ImGui 按鈕「按住直接拖走」不會產生點擊切換
@@ -100,7 +100,7 @@ void FolderUIData::PersistOrder()
     for (size_t idx = 0; idx < gvFolder.size(); ++idx)
     {
         // 分頁 0 = lnk 根目錄；其他分頁 = lnk\<分頁名>
-        std::wstring subDir = (idx == 0) ? std::wstring() : gvFolderName[idx];
+        std::wstring subDir = (idx == 0) ? std::wstring() : m_vTabName[idx];
         std::wstring dir = GetLnkDirForFolder(subDir);
         if (dir.empty()) continue;
 
@@ -179,12 +179,12 @@ void FolderUIData::PersistOrder()
                 std::wstring newName; // 最終名 "NNNN-原名"
             };
             std::vector<DirRenameJob> jobs;
-            std::vector<std::pair<size_t, std::wstring>> memoryUpdates; // (gvFolderName 下標, 最終名)
+            std::vector<std::pair<size_t, std::wstring>> memoryUpdates; // (m_vTabName 下標, 最終名)
 
             int dirOrder = 0;
-            for (size_t idx = 1; idx < gvFolderName.size(); ++idx)
+            for (size_t idx = 1; idx < m_vTabName.size(); ++idx)
             {
-                std::wstring oldName = gvFolderName[idx];
+                std::wstring oldName = m_vTabName[idx];
                 std::wstring stem = StripOrderPrefix(oldName);
 
                 wchar_t szPrefix[16];
@@ -218,7 +218,7 @@ void FolderUIData::PersistOrder()
             // 同步記憶體（目錄名含前綴，路徑拼接全部繼續有效）
             for (const auto& mu : memoryUpdates)
             {
-                gvFolderName[mu.first] = mu.second;
+                m_vTabName[mu.first] = mu.second;
             }
         }
     }

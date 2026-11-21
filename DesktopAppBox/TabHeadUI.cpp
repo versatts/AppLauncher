@@ -8,7 +8,7 @@ extern FolderUIData gFUD;
 
 void TabHeadUI::Render()
 {
-    auto& arrTab = gFUD.gvFolderName;
+    auto& arrTab = gFUD.m_vTabName;
     if (arrTab.size() == 0 || (m_Idx < 0 && m_Idx >= arrTab.size()))
     {
         return;
@@ -57,7 +57,7 @@ void TabHeadUI::Render()
             //ImGui::SetNextItemWidth(80);
            
             bool selected = ImGui::BeginTabItem(tabNameUtf8.c_str(), nullptr,
-                (restoring && i == m_Idx) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None);
+                (restoring && i == m_Idx) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None);//这句是什么意思?
 
             // 執行完 BeginTabItem 立即釋放文字顏色，防禦內建元件被誤傷
             ImGui::PopStyleColor();
@@ -81,13 +81,13 @@ void TabHeadUI::Render()
                 }
             }
 
-            if (i > 0 && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+            if (i > 0 && i < gFUD.gvFolder.size() && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
             {
                 ImGui::SetDragDropPayload("TAB_ORDER", &i, sizeof(int));
                 ImGui::TextUnformatted(tabNameUtf8.c_str());
                 ImGui::EndDragDropSource();
             }
-            if (i > 0 && ImGui::BeginDragDropTarget())
+            if (i > 0 && i < gFUD.gvFolder.size() && ImGui::BeginDragDropTarget())
             {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("TAB_ORDER"))
                 {
@@ -110,7 +110,7 @@ void TabHeadUI::Render()
 
         ImGui::EndTabBar();
     }
-
+#if 0
     // btn set
     ImVec2 tabBarSize = ImGui::GetItemRectSize();
 
@@ -129,6 +129,7 @@ void TabHeadUI::Render()
     {
         openSetModal = true;
     }
+#endif
 #if 0
     btnSize.y = 30;
     static bool bSel = false;
@@ -148,7 +149,7 @@ void TabHeadUI::Render()
     }
 #endif 
 
-    SettingUI::Render(openSetModal);
+ //   SettingUI::Render(openSetModal);
 
     if (m_restoreCountdown > 0)
     {

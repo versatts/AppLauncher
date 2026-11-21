@@ -1159,9 +1159,9 @@ static void HandleDropFiles(HDROP hDrop)
     // 當前分頁對應的目標資料夾（分頁 0 = lnk 根目錄，其他 = lnk\<分頁名>）
     int curIdx = gTabUI.m_Idx;
     std::wstring subDir;
-    if (curIdx > 0 && curIdx < (int)gFUD.gvFolderName.size())
+    if (curIdx > 0 && curIdx < (int)gFUD.m_vTabName.size())
     {
-        subDir = gFUD.gvFolderName[curIdx];
+        subDir = gFUD.m_vTabName[curIdx];
     }
     std::wstring targetDir = GetLnkDirForFolder(subDir);
     if (targetDir.empty())
