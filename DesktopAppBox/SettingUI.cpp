@@ -3,6 +3,8 @@
 #include <windows.h>
 #include "AppConfig.h"
 #include "Application.h"
+#include "ResLoader.h"
+extern ResLoader gRes;
 void SettingUI::Render(bool& openSetModal)
 {
      // 3. 觸發與渲染模態視窗（必須與 Button 分開處理）
@@ -14,7 +16,8 @@ void SettingUI::Render(bool& openSetModal)
 
     // 開始繪製模態視窗
     ImGui::PushFont(theApp.m_vFont[0]);
-    if (ImGui::BeginPopupModal("SetModalPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("SetModalPopup", NULL))
     {
         ImGui::Checkbox("启用拖动", &gCfg.m_bEnableFileDragIO);
 
@@ -76,13 +79,36 @@ void SettingUI::Render(bool& openSetModal)
         // =============================================================
 
 
-
         ImGui::Separator();
-
         // 關閉視窗的按鈕
         if (ImGui::Button("確定", ImVec2(120, 0)))
         {
             ImGui::CloseCurrentPopup();
+        }
+
+
+        auto& g_ShellIcons = gRes.m_vSysIcon;
+        float iconSize = 48.0f;
+        float windowVisibleX2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+
+        for (size_t i = 0; i < g_ShellIcons.size(); ++i)
+        {
+            const auto& icon = g_ShellIcons[i];
+            ImGui::PushID((int)i);
+
+            ImGui::Image((ImTextureID)icon.pSRV, ImVec2(iconSize, iconSize));
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Index: %d | ID: %u (%ux%u)", icon.index, icon.resourceId, icon.width, icon.height);
+            }
+
+            float lastButtonX2 = ImGui::GetItemRectMax().x;
+            float nextButtonX2 = lastButtonX2 + ImGui::GetStyle().ItemSpacing.x + iconSize;
+            if (i + 1 < g_ShellIcons.size() && nextButtonX2 < windowVisibleX2)
+            {
+                ImGui::SameLine();
+            }
+            ImGui::PopID();
         }
 
         ImGui::EndPopup();

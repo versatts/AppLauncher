@@ -137,8 +137,7 @@ static UINT PickBestIcoSize(const wchar_t* icoPath, UINT desired)
 // 🚀 像素 → SRV：縮到目標尺寸（area-average）+ 建紋理 + mipmap。
 //    供直讀 ICO 路徑使用，與 IconToD3D11SRV_Simple 的建資源邏輯一致。
 // ============================================================
-static ID3D11ShaderResourceView* CreateSRVFromPixels(ID3D11Device* pDevice,
-    std::vector<DWORD>& pixels, int& outW, int& outH, int targetSize)
+ID3D11ShaderResourceView* ResLoader::CreateSRVFromPixels(ID3D11Device* pDevice, std::vector<DWORD>& pixels, int& outW, int& outH, int targetSize)
 {
     if (targetSize > 0 && outW > targetSize && outH > targetSize)
     {
@@ -185,6 +184,7 @@ static ID3D11ShaderResourceView* CreateSRVFromPixels(ID3D11Device* pDevice,
         }
         pTex->Release();
     }
+    m_vRes.push_back(pSRV);
     return pSRV;
 }
 
@@ -1082,4 +1082,143 @@ bool ResLoader::ConvertHIconToBlob(HICON hIcon, std::vector<BYTE>& pBlob, UINT& 
 
     ReleaseDC(nullptr, hDC);
     return true;
+}
+
+
+
+// 收集 DLL 中所有 RT_GROUP_ICON 的回呼函式
+static BOOL CALLBACK EnumAllGroupIconsCallback(HMODULE hMod, LPCWSTR lpszType, LPWSTR lpszName, LONG_PTR lParam)
+{
+    UNREFERENCED_PARAMETER(hMod);
+    UNREFERENCED_PARAMETER(lpszType);
+
+    auto* pList = reinterpret_cast<std::vector<IconResourceIdent>*>(lParam);
+    IconResourceIdent ident;
+
+    if (IS_INTRESOURCE(lpszName))
+    {
+        ident.id = (WORD)((UINT_PTR)lpszName);
+        ident.isNameString = false;
+    }
+    else
+    {
+        ident.name = lpszName;
+        ident.isNameString = true;
+    }
+
+    pList->push_back(std::move(ident));
+    return TRUE; // 回傳 TRUE 繼續列舉下一個圖示群組
+}
+
+void ResLoader::LoadAllIconsFromDll(ID3D11Device* pDevice, const wchar_t* dllPath, int targetSize)
+{
+    auto& results = m_vSysIcon;
+    if (!pDevice || !dllPath || *dllPath == L'\0') return;
+
+    // 確保 m_pDevice 有值（因為 CreateSRVFromPngBlob 或相關函式可能會用到）
+    if (!m_pDevice) m_pDevice = pDevice;
+
+    HMODULE hModule = ::LoadLibraryExW(dllPath, nullptr, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+    if (!hModule) return;
+
+    // 1. 取得該 DLL 內所有的 RT_GROUP_ICON 清單
+    std::vector<IconResourceIdent> groupList;
+    ::EnumResourceNamesW(hModule, RT_GROUP_ICON, EnumAllGroupIconsCallback, reinterpret_cast<LONG_PTR>(&groupList));
+
+    results.reserve(groupList.size());
+
+    // 2. 逐一解析每個圖示群組，挑出最大尺寸並轉為 ID3D11ShaderResourceView
+    for (size_t idx = 0; idx < groupList.size(); ++idx)
+    {
+        const auto& ident = groupList[idx];
+        HRSRC hGroupRsrc = ident.isNameString
+            ? ::FindResourceW(hModule, ident.name.c_str(), RT_GROUP_ICON)
+            : ::FindResourceW(hModule, MAKEINTRESOURCEW(ident.id), RT_GROUP_ICON);
+
+        if (!hGroupRsrc) continue;
+
+        HGLOBAL hGlobal = ::LoadResource(hModule, hGroupRsrc);
+        LPVOID pGroupData = ::LockResource(hGlobal);
+        if (!pGroupData) continue;
+
+        PICONGROUPHEADER pIconGrpHdr = (PICONGROUPHEADER)pGroupData;
+        PGRPICONDIRENTRY pIconEntries = (PGRPICONDIRENTRY)((BYTE*)pGroupData + sizeof(ICONGROUPHEADER));
+
+        // 找出該群組內面積最大的單一圖示條目
+        int maxArea = -1;
+        WORD targetIconId = 0;
+        UINT finalWidth = 0;
+        UINT finalHeight = 0;
+        bool foundEntry = false;
+
+        for (WORD i = 0; i < pIconGrpHdr->idCount; ++i)
+        {
+            UINT w = (pIconEntries[i].bWidth == 0) ? 256 : pIconEntries[i].bWidth;
+            UINT h = (pIconEntries[i].bHeight == 0) ? 256 : pIconEntries[i].bHeight;
+            int area = (int)(w * h);
+
+            if (area > maxArea)
+            {
+                maxArea = area;
+                targetIconId = pIconEntries[i].wResourceId;
+                finalWidth = w;
+                finalHeight = h;
+                foundEntry = true;
+            }
+        }
+
+        if (!foundEntry) continue;
+
+        // 讀取對應的 RT_ICON 原始資料
+        HRSRC hIconRsrc = ::FindResourceW(hModule, MAKEINTRESOURCEW(targetIconId), RT_ICON);
+        if (!hIconRsrc) continue;
+
+        DWORD rsrcSize = ::SizeofResource(hModule, hIconRsrc);
+        HGLOBAL hIconGlobal = ::LoadResource(hModule, hIconRsrc);
+        LPVOID pIconData = ::LockResource(hIconGlobal);
+        if (!pIconData || rsrcSize < 4) continue;
+
+        const BYTE* pBytes = (const BYTE*)pIconData;
+        ID3D11ShaderResourceView* pSRV = nullptr;
+        UINT outW = finalWidth;
+        UINT outH = finalHeight;
+
+        // 3. 判斷為 PNG 格式或傳統 DIB 格式，復用您既有的解碼管線
+        if (pBytes[0] == 0x89 && pBytes[1] == 0x50 && pBytes[2] == 0x4E && pBytes[3] == 0x47)
+        {
+            std::vector<BYTE> pngBlob(pBytes, pBytes + rsrcSize);
+            // 注意：CreateSRVFromPngBlob 內部會自動把 pSRV 推入 m_vRes
+            pSRV = CreateSRVFromPngBlob(pDevice, pngBlob, outW, outH);
+        }
+        else
+        {
+            HICON hIcon = ::CreateIconFromResourceEx(
+                const_cast<BYTE*>(pBytes), rsrcSize, TRUE, 0x00030000,
+                finalWidth, finalHeight, LR_DEFAULTCOLOR);
+
+            if (hIcon)
+            {
+                int w = 0, h = 0;
+                // 傳入 targetSize 進行高品質 area-average 下採樣，內部也會推入 m_vRes
+                pSRV = IconToD3D11SRV_Simple(pDevice, hIcon, w, h, targetSize);
+                ::DestroyIcon(hIcon);
+                outW = (UINT)w;
+                outH = (UINT)h;
+            }
+        }
+
+        if (pSRV)
+        {
+            LoadedIconItem item;
+            item.index = (int)idx;
+            item.resourceId = ident.id;
+            item.resourceName = ident.name;
+            item.pSRV = pSRV;
+            item.width = outW;
+            item.height = outH;
+            results.push_back(std::move(item));
+        }
+    }
+
+    ::FreeLibrary(hModule);
 }
