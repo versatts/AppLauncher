@@ -93,12 +93,12 @@ void ShowCloseConfDlg(bool& show_close_confirmation)
             ::PostMessage(g_hwnd, WM_CLOSE, 0, 0);
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button("重启", ImVec2(button_width, 0))) // 統一為繁體
-        {
-            ImGui::CloseCurrentPopup();
-            ::PostMessage(g_hwnd, WM_CLOSE, 1, 0); // WndProc 中需處理 wParam == 1 的邏輯
-        }
+        //ImGui::SameLine();
+        //if (ImGui::Button("重启", ImVec2(button_width, 0))) // 統一為繁體
+        //{
+        //    ImGui::CloseCurrentPopup();
+        //    ::PostMessage(g_hwnd, WM_CLOSE, 1, 0); // WndProc 中需處理 wParam == 1 的邏輯
+        //}
 
         ImGui::SameLine();
         if (ImGui::Button("取消", ImVec2(button_width, 0)))
@@ -168,7 +168,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     g_SwapChainOccluded = theApp.g_SwapChainOccluded;
 
     gRes.m_pDevice = g_pd3dDevice;
-#if 0
+#if 1
     gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\shell32.dll", 64);
     gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\imageres.dll", 64);
     gRes.LoadAllIconsFromDll(gRes.m_pDevice, L"C:\\Windows\\System32\\ddores.dll", 64);
@@ -180,6 +180,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 #endif
     ::ShowWindow(hwnd, SW_SHOW);
     ::UpdateWindow(hwnd);
+
 
     ::DragAcceptFiles(hwnd, gCfg.m_bEnableFileDragIO ? TRUE : FALSE);
 
@@ -1227,6 +1228,39 @@ static void HandleDropFiles(HDROP hDrop)
 }
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+    // 🟢 直接在所有滑鼠按下訊息（客戶區左/右鍵、標題列非客戶區）最前端攔截
+    if (msg == WM_MOUSEACTIVATE ||
+        msg == WM_LBUTTONDOWN ||
+        msg == WM_RBUTTONDOWN ||
+        msg == WM_NCLBUTTONDOWN)
+    {
+        if (g_isTopMost)
+        {
+            // 🟢 標記：接下來觸發的開始功能表關閉事件是由點擊本視窗引起的，不要沉底！
+            g_keepTopAfterEsc = true;
+            g_escTriggerTime = ::GetTickCount64();
+
+            g_isTopMost = false;
+            g_isAppBoxActiveMode = true;
+
+            // 先移除 TOPMOST 並暫時放在一般視窗頂端
+            ::SetWindowPos(g_hwnd, HWND_TOP, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+            // 發送 Esc 禮貌關閉開始功能表
+            INPUT inputs[2] = {};
+            inputs[0].type = INPUT_KEYBOARD;
+            inputs[0].ki.wVk = VK_ESCAPE;
+            inputs[1].type = INPUT_KEYBOARD;
+            inputs[1].ki.wVk = VK_ESCAPE;
+            inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+            ::SendInput(2, inputs, sizeof(INPUT));
+        }
+
+        if (msg == WM_MOUSEACTIVATE)
+            return MA_NOACTIVATE;
+    }
+
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
     switch (msg)

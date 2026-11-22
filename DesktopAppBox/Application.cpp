@@ -261,11 +261,14 @@ void Application::InitImGuiContext(float fScale)
 
     // 檢查檔案是否存在，避免因設定錯誤字體導致崩潰
     ImFont* fontDefault = nullptr;
-    
+    float fs = fontSize;
     for (int i = 0; i < 5; i++)
     {
         ImFont* font = nullptr;
-        float fs = fontSize - i * 2;
+        if (fontSize > i * 2)
+        {
+            fs = fontSize - i * 2;
+        }
         cfg.MergeMode = false;
         cfg.GlyphOffset.y = 0;
 

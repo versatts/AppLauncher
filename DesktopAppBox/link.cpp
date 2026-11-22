@@ -550,3 +550,9 @@ HICON ExtractExeMainIcon(LPCWSTR exePath)
     DestroyIcon(hIconSmall); // 小图标不用，直接释放
     return hIconLarge;
 }
+
+void OpenCurrentExeDirectory()
+{
+    // 3. 呼叫 Windows 檔案總管開啟該目錄
+    ::ShellExecuteW(nullptr, L"open", GetRootDir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}

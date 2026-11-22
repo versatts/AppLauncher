@@ -79,7 +79,9 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
     g.totalCellHeight = h;
     if (bShowText)
     {
-        g.totalCellHeight = h + g.textGap + g.textBlockHeight;
+        ImGui::PushFont(theApp.m_vFont[3]);
+        g.totalCellHeight = h + g.textGap + ImGui::GetTextLineHeight() + g.textGap;
+        ImGui::PopFont();
     }
 
     // 💡 穩定寬度：GetContentRegionAvail().x 是動態值（滾動條出現時自動扣減），
@@ -295,10 +297,16 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
             ImVec2 pos = ImGui::GetCursorScreenPos();
             pos.x += g.dynamicPadding;
             pos.x += (g.btnSize.x + g.itemSpacingX * 2) * (itemIdx % g.maxItemsPerRow);
+            pos.y -= (g.textGap + ImGui::GetStyle().FramePadding.y);
             ImGui::SetCursorScreenPos(pos);
 
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 2.0f);
+            ImGui::PushStyleColor(ImGuiCol_Border, IMVEC4("#75F94D"));
+            ImGui::PushStyleColor(ImGuiCol_NavHighlight, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
             ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
             bool enterPressed = ImGui::InputText("##rename_input", s_renameBuf, sizeof(s_renameBuf), flags);
+            ImGui::PopStyleColor(2);
+            ImGui::PopStyleVar();
             bool escPressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
             bool deactivated = (s_editFrames > 1) && ImGui::IsItemDeactivated();
 
@@ -387,6 +395,7 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         app.sLnkPath = newPath;
         app.sDisplay = newNameUtf8;
     }
+#if 0
     void FolderUI::DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g, float fRound)
     {
         // 懸停滾動狀態（同一時間只有一個項被懸停，單份狀態即可）
@@ -538,6 +547,7 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         drawList->PopClipRect();
 
     }
+#endif
 
     // ============================================================
     // 懸停 Tooltip：顯示啟動目標路徑
@@ -637,7 +647,11 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             {
                 ::PostMessage(g_hwnd, WM_CLOSE, 1, 0);
             }
-
+            ImGui::SameLine();
+            if (ImGui::Button("打开目录", ImVec2(120, 0)))
+            {
+                OpenCurrentExeDirectory();
+            }
 
             auto& g_ShellIcons = gRes.m_vSysIcon;
             float iconSize = 48.0f;

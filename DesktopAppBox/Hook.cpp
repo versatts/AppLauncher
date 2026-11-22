@@ -1,10 +1,10 @@
-#include "Hook.h"
+ï»¿#include "Hook.h"
 
 #include <psapi.h>
 #pragma comment(lib, "psapi.lib")
 
 extern HWND g_hwnd;
-// ÅĞ”àÖ¸¶¨µÄÒ•´°ÊÇ·ñŒÙì¶ Windows é_Ê¼¹¦ÄÜ±í
+// åˆ¤æ–·æŒ‡å®šçš„è¦–çª—æ˜¯å¦å±¬æ–¼ Windows é–‹å§‹åŠŸèƒ½è¡¨
 bool IsStartMenuWindow(HWND hwnd)
 {
     if (!hwnd) return false;
@@ -22,13 +22,13 @@ bool IsStartMenuWindow(HWND hwnd)
 
     if (::QueryFullProcessImageNameW(hProcess, 0, exePath, &size))
     {
-        // ÌáÈ¡™nÃû
+        // æå–æª”å
         const wchar_t* fileName = wcsrchr(exePath, L'\\');
         fileName = fileName ? (fileName + 1) : exePath;
 
-        // Win10/11 é_Ê¼¹¦ÄÜ±íßM³ÌÃû·Q
+        // Win10/11 é–‹å§‹åŠŸèƒ½è¡¨é€²ç¨‹åç¨±
         if (_wcsicmp(fileName, L"StartMenuExperienceHost.exe") == 0 ||
-            _wcsicmp(fileName, L"SearchHost.exe") == 0) // ÈôÏ£Íû°´ Win æIááÖ±½Ó´ò×ÖËÑŒ¤•rÒ²±£³ÖÖÃí”£¬¿É¼ÓÉÏ´Ëí—
+            _wcsicmp(fileName, L"SearchHost.exe") == 0) // è‹¥å¸Œæœ›æŒ‰ Win éµå¾Œç›´æ¥æ‰“å­—æœå°‹æ™‚ä¹Ÿä¿æŒç½®é ‚ï¼Œå¯åŠ ä¸Šæ­¤é …
         {
             isStartMenu = true;
         }
@@ -37,38 +37,75 @@ bool IsStartMenuWindow(HWND hwnd)
     return isStartMenu;
 }
 
-// ¸ù“şé_Ê¼¹¦ÄÜ±í î‘BÇĞ“Q Z-Order
+bool g_isAppBoxActiveMode = false;
+bool g_isTopMost = false;
+bool g_keepTopAfterEsc = false;
+ULONGLONG g_escTriggerTime = 0;
+
+// æ ¹æ“šé–‹å§‹åŠŸèƒ½è¡¨ç‹€æ…‹åˆ‡æ› Z-Order
 void UpdateWindowZOrderForStartMenu(HWND foregroundHwnd)
 {
     if (!g_hwnd || !::IsWindow(g_hwnd)) return;
 
-    static bool s_isTopMost = false;
-    bool shouldBeTop = IsStartMenuWindow(foregroundHwnd);
+    bool isStartMenu = IsStartMenuWindow(foregroundHwnd);
 
-    // Èç¹ûÄ¿Ç°ÕıÔÚüc“ô²Ù×÷Äú×Ô¼ºµÄÒ•´°£¨ÀıÈçÍÏÒ·»òüc“ôˆDÊ¾£©£¬ÏÈ²»Òª°ÑËü³ÁÏÂÈ¥
-    if (!shouldBeTop && foregroundHwnd == g_hwnd)
+    if (isStartMenu)
     {
-        return;
+        g_keepTopAfterEsc = false; // é‡ç½®æ——æ¨™
+        g_isAppBoxActiveMode = false;
+        if (!g_isTopMost)
+        {
+            g_isTopMost = true;
+            ::SetWindowPos(g_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
     }
+    else
+    {
+        // ğŸŸ¢ æª¢æŸ¥æ˜¯å¦ç‚ºå‰›å‰›é»æ“Šè¦–çª—ç™¼é€ Esc å¾Œï¼ˆ500ms å…§ï¼‰å¼•ç™¼çš„ç„¦é»è½‰ç§»
+        bool isFromOurEsc = g_keepTopAfterEsc && ((::GetTickCount64() - g_escTriggerTime) < 500);
+        g_keepTopAfterEsc = false; // æ¶ˆè€—æ‰é€™æ¬¡ä¿è­·æ©Ÿæœƒï¼ˆä¹‹å¾Œä½¿ç”¨è€…å†å»é»åˆ¥çš„è»Ÿé«”å°±æœƒæ­£å¸¸æ²‰åº•ï¼‰
 
-    if (shouldBeTop && !s_isTopMost)
-    {
-        s_isTopMost = true;
-        ::SetWindowPos(g_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
-    else if (!shouldBeTop && s_isTopMost)
-    {
-        s_isTopMost = false;
-        // ±ØíšÏÈÈ¡Ïû TOPMOST£¬²ÅÄÜÕæÕı³Áµ½ HWND_BOTTOM
-        ::SetWindowPos(g_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        ::SetWindowPos(g_hwnd, HWND_BOTTOM, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        bool clickedInsideAppBox = false;
+        if (g_isTopMost || isFromOurEsc)
+        {
+            POINT ptCursor;
+            RECT rcWin;
+            if (::GetCursorPos(&ptCursor) && ::GetWindowRect(g_hwnd, &rcWin))
+            {
+                if (::PtInRect(&rcWin, ptCursor))
+                {
+                    clickedInsideAppBox = true;
+                }
+            }
+        }
+
+        // ç¢ºä¿ç§»é™¤ TOPMOST
+        if (g_isTopMost)
+        {
+            g_isTopMost = false;
+            ::SetWindowPos(g_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+
+        if (clickedInsideAppBox || isFromOurEsc || foregroundHwnd == g_hwnd)
+        {
+            // ğŸŸ¢ å› ç‚ºé–‹å§‹åŠŸèƒ½è¡¨é—œé–‰æ™‚ç³»çµ±æŠŠç„¦é»é‚„çµ¦äº†èƒŒå¾Œçš„è¦–çª—ï¼ˆå¦‚ç€è¦½å™¨ï¼‰ï¼Œ
+            // é€™è£¡å¿…é ˆå†æ¬¡å‘¼å« SetWindowPos(HWND_TOP) æŠŠæˆ‘å€‘çš„è¦–çª—å£“åœ¨è©²è¦–çª—ä¸Šé¢ï¼
+            g_isAppBoxActiveMode = true;
+            ::SetWindowPos(g_hwnd, HWND_TOP, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        else
+        {
+            // ä¹‹å¾Œä½¿ç”¨è€…å†å»é»æ“Šæ¡Œé¢æˆ–å…¶ä»–è»Ÿé«”æ™‚ï¼Œå› ç‚º isFromOurEsc å·²æ¶ˆè€—å®Œç•¢ï¼Œå°±æœƒé †åˆ©æ²‰åº•
+            g_isAppBoxActiveMode = false;
+            ::SetWindowPos(g_hwnd, HWND_BOTTOM, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
     }
 }
-
-// WinEvent »Øºôº¯”µ£º®”Ïµ½yÇ°¾°Ò•´°¸Ä×ƒ•r×Ô„ÓÓ|°l
+// WinEvent å›å‘¼å‡½æ•¸ï¼šç•¶ç³»çµ±å‰æ™¯è¦–çª—æ”¹è®Šæ™‚è‡ªå‹•è§¸ç™¼
 void CALLBACK WinEventProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd,
     LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
 {
