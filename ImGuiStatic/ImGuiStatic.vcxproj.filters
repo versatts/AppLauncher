@@ -16,6 +16,9 @@
     <Filter Include="ImGui">
       <UniqueIdentifier>{eb177305-394f-4d28-8595-8d8ce896432d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ImGui\misc">
+      <UniqueIdentifier>{ecd7550b-ef9a-4f65-a679-3e326f528479}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -46,7 +49,7 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="..\..\imgui\misc\cpp\imgui_stdlib.h">
-      <Filter>源文件</Filter>
+      <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

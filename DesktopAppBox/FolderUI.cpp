@@ -5,6 +5,7 @@
 #include "Application.h"
 #include <thread>
 #include "ResLoader.h"
+#include "FontPreview.h"
 // 來自 main.cpp：檔案拖入/拖出功能總開關
 extern AppConfig gCfg;
 extern ResLoader gRes;
@@ -583,67 +584,83 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
         {
             ImGui::Checkbox("启用拖动", &gCfg.m_bEnableFileDragIO);
 
-
             // ==================== 新增的字體選擇設定區域 ====================
             ImGui::Spacing();
             ImGui::TextDisabled("字體設定");
 
-            // 1. 下拉選擇字體 (僅顯示 ttf)
-            // 這裡利用 ImGui 的 Callback 模式來動態讀取 std::vector 中的字串
-            auto FontGetter = [](void* data, int idx, const char** out_text) -> bool {
-                auto& fonts = *static_cast<std::vector<std::string>*>(data);
-                if (idx < 0 || idx >= (int)fonts.size()) return false;
-                *out_text = fonts[idx].c_str();
-                return true;
-                };
+            static FontPreview s_fontPreview;
+            static bool s_needRefreshPreview = true; // 首次開啟時自動生成一次
 
+            // 1. 選擇字體下拉框
             if (!gCfg.m_vSystemFonts.empty())
             {
-                // 取得目前選中字體的名稱（如果索引超出範圍，則顯示提示文字）
                 const char* current_item = (gCfg.m_nCurrentFontIndex >= 0 && gCfg.m_nCurrentFontIndex < (int)gCfg.m_vSystemFonts.size())
                     ? gCfg.m_vSystemFonts[gCfg.m_nCurrentFontIndex].c_str()
                     : "請選擇字體...";
 
-                // 開始繪製下拉選單外框
                 if (ImGui::BeginCombo("選擇字體", current_item))
                 {
                     for (int n = 0; n < (int)gCfg.m_vSystemFonts.size(); n++)
                     {
                         bool is_selected = (gCfg.m_nCurrentFontIndex == n);
-
-                        // 繪製每一個可選的字體項目
                         if (ImGui::Selectable(gCfg.m_vSystemFonts[n].c_str(), is_selected))
                         {
                             gCfg.m_nCurrentFontIndex = n;
-                            gCfg.m_sEnFont = gCfg.m_vSystemFonts[n]; // 同步更新字體名稱
+                            gCfg.m_sEnFont = gCfg.m_vSystemFonts[n];
+                            s_needRefreshPreview = true;
                         }
-
-                        // 設定預設聚焦滾動到目前選中的項目
-                        if (is_selected)
-                        {
-                            ImGui::SetItemDefaultFocus();
-                        }
+                        if (is_selected) ImGui::SetItemDefaultFocus();
                     }
-                    ImGui::EndCombo(); // 結束下拉選單內容繪製
+                    ImGui::EndCombo();
                 }
             }
-            else
+
+            // 2. 字號、粗體、斜體控制項（任一項被修改就觸發刷新）
+            if (ImGui::SliderInt("字號大小", &gCfg.m_nFontSize, 8, 72, "%d px"))
+                s_needRefreshPreview = true;
+
+            if (ImGui::Checkbox("粗體 (Bold)", &gCfg.m_bFontBold))
+                s_needRefreshPreview = true;
+            //ImGui::SameLine();
+            //if (ImGui::Checkbox("斜體 (Italic)", &gCfg.m_bFontItalic))
+            //    s_needRefreshPreview = true;
+
+            // 3. 自動重建並展示預覽圖片
+            if (s_needRefreshPreview && !gCfg.m_sEnFont.empty())
             {
-                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "未偵測到系統字體！");
+                s_needRefreshPreview = false;
+                //s_fontPreview.CreatePreviewUTF8(
+                //    theApp.g_pd3dDevice,
+                //    gCfg.m_sEnFont,
+                //    gCfg.m_nFontSize,
+                //    u8"字體預覽 Preview 0123",
+                //    gCfg.m_bFontBold,
+                //    gCfg.m_bFontItalic
+                //);
+
+                s_fontPreview.CreatePreviewW(
+                    theApp.g_pd3dDevice,
+                    gCfg.m_sEnFont,
+                    gCfg.m_nFontSize,
+                    _T("字體預覽 Preview 0123"),
+                    gCfg.m_bFontBold,
+                    gCfg.m_bFontItalic
+                );
             }
-            // 2. 字號設定 (使用 Slider 或 Drag 控制範圍，例如 8 ~ 72 級字)
-            ImGui::SliderInt("字號大小", &gCfg.m_nFontSize, 8, 72, "%d px");
 
-            // 3. 樣式設定 (粗體與斜體，排在同一行以節省空間)
-            ImGui::Checkbox("粗體 (Bold)", &gCfg.m_bFontBold);
-            ImGui::SameLine();
-            ImGui::Checkbox("斜體 (Italic)", &gCfg.m_bFontItalic);
-            // =============================================================
+            if (s_fontPreview.pTexture)
+            {
+                ImGui::BeginChild("FontPreviewBox", ImVec2(0, 88), true, ImGuiWindowFlags_HorizontalScrollbar);
+                ImGui::Image((ImTextureID)s_fontPreview.pTexture, s_fontPreview.texSize);
+                ImGui::EndChild();
+            }
 
+            // 3. 關閉設定視窗或不需要時，隨時釋放顯存
+            // s_fontPreview.Release();
 
             ImGui::Separator();
             // 關閉視窗的按鈕
-            if (ImGui::Button("立即生效", ImVec2(120, 0)))
+            if (ImGui::Button("立即重启", ImVec2(120, 0)))
             {
                 ::PostMessage(g_hwnd, WM_CLOSE, 1, 0);
             }

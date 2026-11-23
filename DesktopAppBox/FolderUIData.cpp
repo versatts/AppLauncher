@@ -12,7 +12,7 @@ void FolderUIData::Init(ID3D11Device* pd3dDevice, ResLoader* pRL)
     std::vector<std::wstring> vFolder;
     auto lnkList = EnumLnkFilesInAppDir(sDir, vFolder);
 
-    if (lnkList.size())
+//    if (lnkList.size())
     {
         ST_FOLDER folder0;
         folder0.sName = _T("Useful");

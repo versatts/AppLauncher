@@ -2,7 +2,8 @@
 #include <windows.h>
 #include <TCHAR.h>
 #include "ImGuiObj.h"
-
+#include <shlobj.h> // 用於取得使用者字體目錄 (可選)
+#include <algorithm>
 void AppConfig::Save(FILE* f)
 {
     fprintf(f, "\n[STYLE]\n");
@@ -55,37 +56,62 @@ AppConfig::AppConfig()
 
 void AppConfig::LoadSystemFonts()
 {
-	m_vSystemFonts.clear();
+    m_vSystemFonts.clear();
 
-	// 1. 取得 Windows 系統目錄 (通常是 C:\Windows)
-	char szWinDir[MAX_PATH];
-	if (GetWindowsDirectoryA(szWinDir, MAX_PATH) == 0)
-	{
-		return; // 取得失敗則返回
-	}
+    // 輔助 Lambda：掃描指定資料夾中的所有 .ttf / .ttc / .otf 字體檔，並轉為 UTF-8 存入列表
+    auto ScanFontDir = [this](const std::wstring& dirPath)
+        {
+            std::wstring searchPath = dirPath + L"\\*.*";
+            WIN32_FIND_DATAW findData;
+            HANDLE hFind = ::FindFirstFileW(searchPath.c_str(), &findData);
+            if (hFind == INVALID_HANDLE_VALUE)
+                return;
 
-	// 2. 拼接出字體資料夾的搜尋路徑 (例如 C:\Windows\Fonts\*.ttf)
-	std::string sFontSearchPath = std::string(szWinDir) + "\\Fonts\\*.ttf";
+            do
+            {
+                if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                    continue;
 
-	// 3. 開始搜尋檔案
-	WIN32_FIND_DATAA findData;
-	HANDLE hFind = FindFirstFileA(sFontSearchPath.c_str(), &findData);
+                std::wstring fileName(findData.cFileName);
+                if (fileName.size() <= 4)
+                    continue;
 
-	if (hFind != INVALID_HANDLE_VALUE)
-	{
-		do
-		{
-			// 排除資料夾，只處理檔案
-			if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-			{
-				// 僅儲存檔名 (例如: Arial.ttf)
-				m_vSystemFonts.push_back(findData.cFileName);
+                // 檢查副檔名（不分大小寫支援 .ttf, .ttc, .otf）
+                const wchar_t* ext = fileName.c_str() + fileName.size() - 4;
+                if (_wcsicmp(ext, L".ttf") == 0 ||
+                    _wcsicmp(ext, L".ttc") == 0 ||
+                    _wcsicmp(ext, L".otf") == 0)
+                {
+                    // 將寬字元檔名轉為 UTF-8，確保包含中文字元的字體檔名在 ImGui 下拉選單正常顯示
+                    int utf8Len = ::WideCharToMultiByte(CP_UTF8, 0, fileName.c_str(), -1, nullptr, 0, nullptr, nullptr);
+                    if (utf8Len > 1)
+                    {
+                        std::string utf8Name(utf8Len - 1, '\0');
+                        ::WideCharToMultiByte(CP_UTF8, 0, fileName.c_str(), -1, &utf8Name[0], utf8Len, nullptr, nullptr);
+                        m_vSystemFonts.push_back(utf8Name);
+                    }
+                }
+            } while (::FindNextFileW(hFind, &findData));
 
-				// 如果需要完整路徑，可以改用下面這行：
-				// m_vSystemFonts.push_back(std::string(szWinDir) + "\\Fonts\\" + findData.cFileName);
-			}
-		} while (FindNextFileA(hFind, &findData));
+            ::FindClose(hFind);
+        };
 
-		FindClose(hFind); // 關閉搜尋句柄
-	}
+    // 1. 掃描系統字體目錄 (C:\Windows\Fonts)
+    wchar_t szWinDir[MAX_PATH] = { 0 };
+    if (::GetWindowsDirectoryW(szWinDir, MAX_PATH) > 0)
+    {
+        ScanFontDir(std::wstring(szWinDir) + L"\\Fonts");
+    }
+
+    // 2. 掃描當前使用者個人安裝的字體目錄 (Win10/11 雙擊安裝字體的預設位置)
+    wchar_t szLocalAppData[MAX_PATH] = { 0 };
+    if (SUCCEEDED(::SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, szLocalAppData)))
+    {
+        ScanFontDir(std::wstring(szLocalAppData) + L"\\Microsoft\\Windows\\Fonts");
+    }
+
+    // 3. 依字母順序排序，方便在下拉選單中尋找（不分大小寫）
+    std::sort(m_vSystemFonts.begin(), m_vSystemFonts.end(), [](const std::string& a, const std::string& b) {
+        return _stricmp(a.c_str(), b.c_str()) < 0;
+        });
 }

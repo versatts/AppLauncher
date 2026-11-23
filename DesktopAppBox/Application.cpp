@@ -3,6 +3,7 @@
 #include "link.h"
 #include "AppConfig.h"
 #include "imguiobj.h"
+
 // Helper functions
 bool Application::CreateDeviceD3D(HWND hWnd)
 {
@@ -181,53 +182,7 @@ void Application::InitImGuiContext(float fScale)
     colors[ImGuiCol_CheckMark] = textColor;
     
 #endif
-#if 0
-    colors[ImGuiCol_TitleBg] = IMCLR("#FFC90E");
-    colors[ImGuiCol_TitleBgActive] = IMCLR("#FFC90E");
-    colors[ImGuiCol_TitleBgCollapsed] = IMCLR("#FF7F27");
 
-    colors[ImGuiCol_WindowBg] = IMCLR("#A349A4");
-    //#37373D
-    // 1. 窗口主体背景
-
-    style.Colors[ImGuiCol_Text] = ImColor(0xFF, 0xFF, 0xFF);      //普通文字
-    style.Colors[ImGuiCol_TextDisabled] = ImColor(0x80, 0x80, 0x80); //禁用控件文字;
-
-    style.Colors[ImGuiCol_FrameBg] = ImColor(40, 40, 40, 255);
-    style.Colors[ImGuiCol_FrameBgHovered] = ImColor(60, 60, 60, 255);
-    style.Colors[ImGuiCol_FrameBgActive] = ImColor(80, 80, 80, 255);
-
-    style.Colors[ImGuiCol_SliderGrab] = ImColor(60, 180, 255, 255);
-    style.Colors[ImGuiCol_SliderGrabActive] = ImColor(90, 200, 255, 255);
-
-    // Base color exactly matching RGB(85, 85, 85)
-    style.Colors[ImGuiCol_Button] = ImVec4(0.333f, 0.333f, 0.333f, 1.0f); // RGB(85, 85, 85) - Base Button
-    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.400f, 0.400f, 0.400f, 1.0f); // RGB(102, 102, 102) - Elevated hover
-    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Sunken pressed state
-
-    // =========================================================================
-
-       // ==================== 🚀 FIXED TAB HEADER MATCHING STYLE ====================
-    // 1. Core Tab Colors
-    style.Colors[ImGuiCol_Tab] = ImVec4(0.266f, 0.266f, 0.266f, 1.0f); // RGB(68, 68, 68) - Inactive tab
-    style.Colors[ImGuiCol_TabActive] = ImVec4(0.380f, 0.380f, 0.380f, 1.0f); // RGB(97, 97, 97) - Hovered highlight
-    style.Colors[ImGuiCol_TabHovered] = ImVec4(0.480f, 0.480f, 0.480f, 1.0f); // RGB(55, 55, 55) - Active tab (blends with WindowBg)
-    // 2. 💡 Frame / Border Customization
-    // Overriding the border color to make sure it stands out explicitly around your selected items
-    style.Colors[ImGuiCol_Border] = ImVec4(0.450f, 0.460f, 0.470f, 1.0f); // Sharp contrast gray for wireframe lines
-
-    // 3. Geometry Tweak (Enabling Tab Border)
-    // ============================================================================
-
-        // ==================== 🚀 DARK TOOLTIP BACKGROUND ====================
-    // Deep Charcoal background for all tooltips and popups
-    style.Colors[ImGuiCol_PopupBg] = ImVec4(0.120f, 0.120f, 0.130f, 0.95f); // Near black with 95% opacity
-
-    // Optional: Add a crisp subtle border to frame the tooltip nicely against the backdrop
-    style.Colors[ImGuiCol_Border] = ImVec4(0.350f, 0.350f, 0.360f, 1.0f); // Sleek charcoal border
-    style.PopupBorderSize = 1.0f; // Force a 1-pixel outline on popups/tooltips
-    // ====================================================================
-#endif
 
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)

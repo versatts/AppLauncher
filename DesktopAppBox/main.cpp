@@ -133,7 +133,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     g_OSWinH = h;
 
     HWND hwnd = ::CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        WS_EX_TOOLWINDOW/* | WS_EX_NOACTIVATE*/,//这个NOACTIVATE有什么用？
         wc.lpszClassName,
         L"-AppBox-",
         WS_POPUP/* | WS_CLIPCHILDREN*/,
