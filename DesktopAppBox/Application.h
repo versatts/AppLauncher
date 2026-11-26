@@ -3,7 +3,7 @@
 #include <d3d11.h>
 #include <vector>
 
-#define ENABLE_VIEWPORTS 1
+#define ENABLE_VIEWPORTS 0
 class Application
 {
 public:
