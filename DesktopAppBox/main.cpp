@@ -307,6 +307,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                   //  ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.6f); // 可選：讓背景微微變暗，視覺效果更好
                 }
 
+                //auto mvp = ImGui::GetMainViewport();
+                //ImGui::SetNextWindowViewport(mvp->ID);
                 ImGui::Begin("###-AppBox-", &bOpen, win_flags);
 
                 // 1. 取得進度條需要的所有幾何資訊
@@ -1038,22 +1040,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         {
             ImGui::UpdatePlatformWindows();
             ImGui::RenderPlatformWindowsDefault();
+#if 1
+            static int iLastSize = 0;
             ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
-            for (int i = 0; i < platform_io.Viewports.Size; i++)
+            if (iLastSize != platform_io.Viewports.Size)
             {
-                ImGuiViewport* vp = platform_io.Viewports[i];
-                if (vp == ImGui::GetMainViewport())
-                    continue;
-                HWND hImGuiWnd = reinterpret_cast<HWND>(vp->PlatformHandleRaw);
-                if (!hImGuiWnd || !::IsWindow(hImGuiWnd))
-                    continue;
-                ::SetWindowPos(
-                    hImGuiWnd,
-                    HWND_TOP,
-                    0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
-                );
+                for (int i = 0; i < platform_io.Viewports.Size; i++)
+                {
+                    ImGuiViewport* vp = platform_io.Viewports[i];
+                    if (vp == ImGui::GetMainViewport())
+                        continue;
+                    HWND hImGuiWnd = reinterpret_cast<HWND>(vp->PlatformHandleRaw);
+                    if (!hImGuiWnd || !::IsWindow(hImGuiWnd))
+                        continue;
+                    ::SetWindowPos(
+                        hImGuiWnd,
+                        HWND_TOP,
+                        0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+                    );
+                }
             }
+            iLastSize = platform_io.Viewports.Size;
+#endif
         }
 #endif
         HRESULT hr = g_pSwapChain->Present(1, 0);
@@ -1337,7 +1346,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_QUERYENDSESSION:
         // 1. 檢查是否有未儲存的工作，可以在此跳出提示（但不建議阻擋太久）
         // 2. 回傳 TRUE 代表同意關機
-        ::MessageBox(NULL, _T("content"), _T("title"), MB_OK);
+        ::SendMessage(g_hwnd, WM_CLOSE, 0, 0);
         return TRUE;
 
     case WM_ENDSESSION:

@@ -670,6 +670,10 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
                 OpenCurrentExeDirectory();
             }
 
+            ImGui::Separator();
+            ImGui::Dummy(ImVec2(10, 200));
+            ImGui::Separator();
+
             auto& g_ShellIcons = gRes.m_vSysIcon;
             float iconSize = 48.0f;
             float windowVisibleX2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
