@@ -684,12 +684,71 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
     // 💡 根據當前的分頁索引命名子視窗，例如 "AppGridRegion_0", "AppGridRegion_1"
     char childWindowId[64];
     sprintf_s(childWindowId, "AppGridRegion_%d", idx);
+
+    // 🟢 1. 加上 ImGuiWindowFlags_NoScrollWithMouse，接管滑鼠滾輪由我們自己做平滑插值
     ImGuiWindowFlags win_flags = ImGuiWindowFlags_NoScrollbar;
+
+#define SCROLL_FANCY 1
+#if SCROLL_FANCY
+    win_flags |= ImGuiWindowFlags_NoScrollWithMouse;
+#endif
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGuiChildFlags c_flags = 0;
+
     if (ImGui::BeginChild(childWindowId, ImVec2(0.0f, 0.0f), c_flags, win_flags))
     {
         GridLayout g = CalcGridLayout(fud.m_bShowName, fud.gpvApp->size());
+
+#if SCROLL_FANCY
+        // ==================== 【平滑滾動控制邏輯】 ====================
+        static int   s_lastTabIdx = -1;
+        static float s_targetScrollY = 0.0f;
+        static float s_currentScrollY = 0.0f;
+
+        // 切換分頁時，立即同步當前分頁的滾動位置（避免從上一頁的位置飛過來）
+        if (s_lastTabIdx != idx)
+        {
+            s_lastTabIdx = idx;
+            s_currentScrollY = ImGui::GetScrollY();
+            s_targetScrollY = s_currentScrollY;
+        }
+
+        float maxScrollY = ImGui::GetScrollMaxY();
+        float deltaTime = ImGui::GetIO().DeltaTime;
+
+        // 2. 偵測滑鼠滾輪輸入（僅當滑鼠懸停在圖標區域，且未處於編輯或拖曳鎖定狀態時）
+        bool canScroll = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && (s_editingIdx == -1);
+        float wheel = ImGui::GetIO().MouseWheel;
+        if (canScroll && wheel != 0.0f)
+        {
+            // 每次滾輪刻度滾動的像素距離（可依手感調整，預設約為 1.2 格高度或 90px）
+            const float scrollStep = g.totalCellHeight + g.itemSpacingY * 2;
+            s_targetScrollY -= wheel * scrollStep;
+        }
+
+        // 3. 將目標位置限制在合法範圍 [0, maxScrollY] 內
+        if (s_targetScrollY < 0.0f) s_targetScrollY = 0.0f;
+        if (s_targetScrollY > maxScrollY) s_targetScrollY = maxScrollY;
+
+        // 4. 使用與幀率無關的指數平滑插值（Exponential Decay Lerp）
+        //    smoothSpeed 越大跟手越快（建議 12.0f ~ 18.0f 之間）
+        const float smoothSpeed = 15.0f;
+        float diff = s_targetScrollY - s_currentScrollY;
+        if (fabsf(diff) > 0.2f)
+        {
+            // 1 - exp(-speed * dt) 確保在 60Hz 與 144Hz 螢幕上減速手感完全一致
+            float t = 1.0f - expf(-smoothSpeed * deltaTime);
+            s_currentScrollY += diff * t;
+        }
+        else
+        {
+            s_currentScrollY = s_targetScrollY; // 距離極小時直接吸附，避免無意義的微小浮點運算
+        }
+
+        // 5. 將平滑計算後的座標寫回 ImGui 子視窗
+        ImGui::SetScrollY(s_currentScrollY);
+        // ============================================================
+#endif
 
         float maxCalculatedY = g.startPos.y; // 用於追蹤最後一行涵蓋的最大高度位置
         int moveFrom = -1;
