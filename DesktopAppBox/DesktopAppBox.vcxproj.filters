@@ -26,6 +26,7 @@
     </ClInclude>
     <ClInclude Include="Hook.h" />
     <ClInclude Include="FontPreview.h" />
+    <ClInclude Include="DragGhost.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -47,6 +48,7 @@
     </ClCompile>
     <ClCompile Include="Hook.cpp" />
     <ClCompile Include="FontPreview.cpp" />
+    <ClCompile Include="DragGhost.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.txt" />

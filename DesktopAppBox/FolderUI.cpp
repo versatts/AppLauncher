@@ -6,12 +6,109 @@
 #include <thread>
 #include "ResLoader.h"
 #include "FontPreview.h"
+#include "DragGhost.h"
+#include "CustomUI.h"
+static ImGuiDragGhost s_dragGhost;
 // 來自 main.cpp：檔案拖入/拖出功能總開關
 extern AppConfig gCfg;
 extern ResLoader gRes;
 extern HWND g_hwnd;
 // 來自 main.cpp：拖出確認後刪除 lnk 檔案，並排隊幀末熱重載當前分頁
 void AppRemoveDragOutItem(const std::wstring& lnkPath);
+
+void ShowCustomUIDemoModal(ImTextureID arrowIcon)
+{
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    bool isOpen = true;
+    if (ImGui::BeginPopupModal("控件組合演示##CustomUIDemo", &isOpen, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        static std::vector<std::string> vecItems = { "60", "120", "144", "240" };
+        static std::string sCombo1 = "60", sCombo2 = "120", sCombo3 = "144", sCombo4 = "240";
+        static std::string sInput1 = "100", sInput2 = "200", sInput3 = "300", sInput4 = "400";
+
+        const float colW = 190.0f;
+
+        // =========================================================================
+        // 一、 Combo2 的四種組合展示
+        // =========================================================================
+        ImGui::TextDisabled("Combo2 組合演示");
+        ImGui::Separator();
+
+        // 1. 單純 Combo2
+        ImGui::SetNextItemWidth(colW);
+        CustomUI::Combo2("1. 基礎 Combo2##c1", sCombo1, vecItems, -1, arrowIcon);
+
+        ImGui::SameLine();
+
+        // 2. Combo2 + AppendText（第一行右側提示）
+        ImGui::SetNextItemWidth(colW);
+        CustomUI::Combo2("2. 帶右上提示##c2", sCombo2, vecItems, -1, arrowIcon);
+        CustomUI::AppendText("推薦");
+
+        ImGui::Spacing();
+
+        // 3. Combo2 + AppendText2（第二行內部單位，自動讓出箭頭）
+        ImGui::SetNextItemWidth(colW);
+        CustomUI::Combo2("3. 帶右側單位##c3", sCombo3, vecItems, -1, arrowIcon);
+        CustomUI::AppendText2("Hz");
+
+        ImGui::SameLine();
+
+        // 4. Combo2 + AppendText + AppendText2（完整組合）
+        ImGui::SetNextItemWidth(colW);
+        CustomUI::Combo2("4. 完整組合##c4", sCombo4, vecItems, -1, arrowIcon);
+        CustomUI::AppendText("已鎖定", IM_COL32(100, 210, 120, 255));
+        CustomUI::AppendText2("Hz");
+
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+        // =========================================================================
+        // 二、 InputText2 的四種組合展示
+        // =========================================================================
+        ImGui::TextDisabled("InputText2 組合演示");
+        ImGui::Separator();
+
+        // 1. 單純 InputText2
+        ImGui::SetNextItemWidth(colW);
+        CustomUI::InputText2("1. 基礎 InputText2##i1", &sInput1);
+
+        ImGui::SameLine();
+
+        // 2. InputText2 + AppendText（第一行右側提示）
+        ImGui::SetNextItemWidth(colW);
+        CustomUI::InputText2("2. 帶右上提示##i2", &sInput2);
+        CustomUI::AppendText("必填", IM_COL32(255, 110, 110, 255));
+
+        ImGui::Spacing();
+
+        // 3. InputText2 + AppendText2（第二行內部單位）
+        ImGui::SetNextItemWidth(colW);
+        CustomUI::InputText2("3. 帶右側單位##i3", &sInput3);
+        CustomUI::AppendText2("ms");
+
+        ImGui::SameLine();
+
+        // 4. InputText2 + AppendText + AppendText2（完整組合）
+        ImGui::SetNextItemWidth(colW);
+        CustomUI::InputText2("4. 完整組合##i4", &sInput4);
+        CustomUI::AppendText("範圍 0~999");
+        CustomUI::AppendText2("ms");
+
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("關閉演示", ImVec2(100.0f, 0.0f)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
 
 bool IsPath(const std::string& inputStr)
 {
@@ -265,6 +362,16 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
                     s_dragOutArmed = true;
                     s_dragOutFromIdx = (int)itemIdx;
                     s_dragOutLnkPath = app.sLnkPath;
+
+                    // 🟢 直接用 ImGui 引擎渲染出與視窗內 100% 同款的拖曳懸浮框！
+                    s_dragGhost.ShowFromImGui(
+                        theApp.g_pd3dDevice,
+                        theApp.g_pd3dDeviceContext,
+                        (ImTextureID)app.iconSrv,
+                        app.sDisplay,
+                        true // true = 顯示「移除: xxx」，false = 顯示「移動: xxx」
+                    );
+
                     ImGui::PopID();
                     return;
                 }
@@ -660,6 +767,11 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 
             ImGui::Separator();
             // 關閉視窗的按鈕
+            if (ImGui::Button("立即关闭", ImVec2(120, 0)))
+            {
+                ::PostMessage(g_hwnd, WM_CLOSE, 0, 0);
+            }
+            ImGui::SameLine();
             if (ImGui::Button("立即重启", ImVec2(120, 0)))
             {
                 ::PostMessage(g_hwnd, WM_CLOSE, 1, 0);
@@ -669,6 +781,12 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             {
                 OpenCurrentExeDirectory();
             }
+            ImGui::SameLine();
+            if (ImGui::Button("CustomUI", ImVec2(120, 0)))
+            {
+                ImGui::OpenPopup("控件組合演示##CustomUIDemo");
+            }
+            ShowCustomUIDemoModal(0);
 
             ImGui::Separator();
             ImGui::Dummy(ImVec2(10, 200));
@@ -831,10 +949,12 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
             if (::GetAsyncKeyState(VK_ESCAPE) & 0x8000)
             {
                 s_dragOutArmed = false; // ESC：取消，不做任何事
+                s_dragGhost.Hide();
             }
             else if (!(::GetAsyncKeyState(VK_LBUTTON) & 0x8000)) // 左鍵已鬆開
             {
                 s_dragOutArmed = false;
+                s_dragGhost.Hide();
 
                 POINT pt;
                 ::GetCursorPos(&pt);
@@ -880,6 +1000,38 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 
                 s_dragOutFromIdx = -1;
                 s_dragOutLnkPath.clear();
+            }
+            else
+            {
+                POINT pt;
+                ::GetCursorPos(&pt);
+                ::ScreenToClient(hwnd, &pt);
+                RECT rc;
+                ::GetClientRect(hwnd, &rc);
+
+                bool isInsideWindow = (pt.x >= 0 && pt.y >= 0 && pt.x <= rc.right && pt.y <= rc.bottom);
+
+                if (isInsideWindow)
+                {
+                    // 🟢 游標移回視窗內：隱藏桌面懸浮窗（或改用 false 顯示原本的「移動」樣式）
+                    s_dragGhost.Hide();
+                }
+                else
+                {
+                    // 🟢 游標在視窗外：若尚未顯示則重新顯示，並更新跟隨位置
+                    if (!s_dragGhost.m_isVisible && s_dragOutFromIdx >= 0 && s_dragOutFromIdx < (int)fud.gpvApp->size())
+                    {
+                        const auto& dragApp = (*fud.gpvApp)[s_dragOutFromIdx];
+                        s_dragGhost.ShowFromImGui(
+                            theApp.g_pd3dDevice,
+                            theApp.g_pd3dDeviceContext,
+                            (ImTextureID)dragApp.iconSrv,
+                            dragApp.sDisplay,
+                            true // 視窗外紅色提示
+                        );
+                    }
+                    s_dragGhost.UpdatePosition();
+                }
             }
         }
 
