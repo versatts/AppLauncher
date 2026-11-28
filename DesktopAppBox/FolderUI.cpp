@@ -503,159 +503,6 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
         app.sLnkPath = newPath;
         app.sDisplay = newNameUtf8;
     }
-#if 0
-    void FolderUI::DrawTextBlock(ST_APP& app, size_t itemIdx, const GridLayout& g, float fRound)
-    {
-        // 懸停滾動狀態（同一時間只有一個項被懸停，單份狀態即可）
-        // s_hoverIdx: 當前懸停的項目索引；s_hoverStartTime: 該項目開始懸停的時刻
-        static int s_hoverIdx = -1;
-        static double s_hoverStartTime = 0.0;
-
-        // 🚀 雙擊改名：編輯狀態（同一時間只有一個項在編輯，單份狀態即可）
-        static bool s_editing = false;
-        static int  s_editIdx = -1;
-        static char s_editBuf[128];
-        static int  s_editFrames = 0;   // 進入編輯後的幀數（跳過首幀的失焦判定）
-
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-        ImVec2 btnMin = ImGui::GetItemRectMin();
-        ImVec2 btnMax = ImGui::GetItemRectMax();
-
-        // ===== 懸停檢測：按鈕本體 + 下方文字塊區域 =====
-        bool hovered = ImGui::IsItemHovered() ||
-            ImGui::IsMouseHoveringRect(btnMin, ImVec2(btnMax.x, btnMax.y + g.textGap + g.textBlockHeight));
-        if (hovered)
-        {
-            // 剛開始懸停此項：記錄起始時刻（滾動延遲從此刻算起）
-            if (s_hoverIdx != (int)itemIdx)
-            {
-                s_hoverIdx = (int)itemIdx;
-                s_hoverStartTime = ImGui::GetTime();
-            }
-        }
-        else if (s_hoverIdx == (int)itemIdx)
-        {
-            // 滑鼠離開：重置，下次懸停重新從頭計時
-            s_hoverIdx = -1;
-        }
-        bool isHoveredNow = (s_hoverIdx == (int)itemIdx);
-
-        // ===== 懸停時文字塊底色與按鈕懸停色保持一致 =====
-        ImVec2 textBlockMin = ImVec2(btnMin.x, btnMax.y + g.textGap);
-        ImVec2 textBlockMax = ImVec2(btnMax.x, textBlockMin.y + g.textBlockHeight);
-
-        ImU32 bgColor = ImGui::GetColorU32(isHoveredNow ? ImGuiCol_ButtonHovered : ImGuiCol_FrameBg);
-       // drawList->AddRectFilled(textBlockMin, textBlockMax, bgColor, fRound);
-
-        const float textPaddingX = 1.0f;
-        float maxTextWidth = g.btnSize.x - (textPaddingX * 2.0f);
-        // 文字垂直置中於文字塊
-        float textY = textBlockMin.y;// +(g.textBlockHeight - ImGui::GetTextLineHeight()) * 0.5f;
-        ImU32 textColor = ImGui::GetColorU32(ImGuiCol_Text);
-
-        // ===== 🚀 雙擊文字塊進入編輯 =====
-        if (!s_editing && ImGui::IsMouseHoveringRect(textBlockMin, textBlockMax) &&
-            ImGui::IsMouseDoubleClicked(0))
-        {
-            s_editing = true;
-            s_editIdx = (int)itemIdx;
-            strncpy_s(s_editBuf, app.sDisplay.c_str(), _TRUNCATE); // 編輯起點 = 目前顯示名（無前綴）
-            s_editFrames = 0;
-        }
-
-        // ===== 🚀 編輯中：在文字塊位置渲染輸入框，其餘項目照常 =====
-        if (s_editing && s_editIdx == (int)itemIdx)
-        {
-            bool apply = false;
-
-            ImGui::SetCursorScreenPos(textBlockMin);
-            ImGui::SetNextItemWidth(g.btnSize.x);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
-            if (s_editFrames == 0)
-            {
-                ImGui::SetKeyboardFocusHere(0); // 首幀搶焦點
-            }
-            ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
-            if (ImGui::InputText("##rename_item", s_editBuf, sizeof(s_editBuf), flags))
-            {
-                apply = true; // 回車
-            }
-            ImGui::PopStyleColor(1);
-            ImGui::PopStyleVar(1);
-
-            // 失焦（點擊其他地方）→ 應用。跳過首幀：焦點尚未就緒會誤判失焦。
-            // ESC 會清空緩衝區，空名稱在 ApplyItemRename 中視為取消。
-            if (!apply && s_editFrames > 0 && ImGui::IsItemDeactivated())
-            {
-                apply = true;
-            }
-
-            if (apply)
-            {
-                s_editing = false;
-                s_editIdx = -1;
-                ApplyItemRename(app, s_editBuf);
-            }
-            else
-            {
-                s_editFrames++;
-            }
-            return; // 編輯中：不繪製普通文字（底色已繪製）
-        }
-
-        ImVec2 textSize = ImGui::CalcTextSize(app.sDisplay.c_str());
-
-        if (textSize.x <= maxTextWidth)
-        {
-            // 短文本：直接水平居中完整顯示
-            float textRenderX = textBlockMin.x + (g.btnSize.x - textSize.x) * 0.5f;
-            drawList->AddText(ImVec2(textRenderX, textY), textColor, app.sDisplay.c_str());
-            return;
-        }
-
-        if (!isHoveredNow)
-        {
-            // 長文本 + 未懸停：截斷加 "..."
-            std::string finalName = TruncateUtf8WithEllipsis(app.sDisplay, maxTextWidth);
-            drawList->AddText(ImVec2(textBlockMin.x + textPaddingX + 2, textY), textColor, finalName.c_str());
-            return;
-        }
-
-        // ===== 🚀 長文本 + 懸停：跑馬燈滾動顯示完整名稱 =====
-        const float holdTime = 0.6f;    // 頭尾停留時長（秒）
-        const float scrollSpeed = 30.0f; // 滾動速度（像素/秒）
-
-        float maxScroll = textSize.x - maxTextWidth;
-        float scrollDur = maxScroll / scrollSpeed;
-        float cycle = holdTime * 2.0f + scrollDur;
-
-        // 從懸停開始計時，取模循環：頭部停留 → 滾動 → 尾部停留 → 從頭再來
-        float t = (float)(ImGui::GetTime() - s_hoverStartTime);
-        t -= ImFloor(t / cycle) * cycle;
-
-        float scrollOffset;
-        if (t < holdTime)
-        {
-            scrollOffset = 0.0f;                          // 頭部停留：顯示開頭
-        }
-        else if (t < holdTime + scrollDur)
-        {
-            scrollOffset = (t - holdTime) * scrollSpeed;  // 勻速滾動
-        }
-        else
-        {
-            scrollOffset = maxScroll;                    // 尾部停留：顯示結尾
-        }
-
-        // 裁剪在文字塊內繪製（offset 增大 = 文字向左移動 = 逐漸顯示尾部）
-        drawList->PushClipRect(textBlockMin, textBlockMax, true);
-        drawList->AddText(ImVec2(textBlockMin.x + textPaddingX - scrollOffset, textY), textColor, app.sDisplay.c_str());
-        drawList->PopClipRect();
-
-    }
-#endif
 
     // ============================================================
     // 懸停 Tooltip：顯示啟動目標路徑
@@ -673,18 +520,9 @@ GridLayout FolderUI::CalcGridLayout(bool bShowText, size_t itemCount)
             }
         }
     }
-// ============================================================
-// 主渲染流程：換行排版 -> 逐項繪製（按鈕 / 文字塊 / Tooltip）-> 拖曳套用
-// ============================================================
-void FolderUI::Render(HWND hwnd, FolderUIData& fud)
-{
-    if (fud.m_pIdx == nullptr)
-    {
-        return;
-    }
 
-    int idx = *fud.m_pIdx;
-    if (idx < 0 || idx >= fud.gvFolder.size())
+
+    void FolderUI::RenderSetting()
     {
         ImGui::PushFont(theApp.m_vFont[0]);
         if (ImGui::BeginChild("SettingWindow"))
@@ -818,8 +656,27 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
 
         }
         ImGui::EndChild();
-        ImGui::PopFont();
 
+        ImGui::PopFont();
+    }
+// ============================================================
+// 主渲染流程：換行排版 -> 逐項繪製（按鈕 / 文字塊 / Tooltip）-> 拖曳套用
+// ============================================================
+void FolderUI::Render(HWND hwnd, FolderUIData& fud)
+{
+    if (fud.m_pIdx == nullptr)
+    {
+        return;
+    }
+
+    int idx = *fud.m_pIdx;
+    if (idx == fud.gvFolder.size())
+    {
+        RenderSetting();
+        return;
+    }
+    else if (idx < 0)
+    {
         return;
     }
     fud.gpvApp = &(fud.gvFolder[idx].vApp);
@@ -827,54 +684,11 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
     // 💡 根據當前的分頁索引命名子視窗，例如 "AppGridRegion_0", "AppGridRegion_1"
     char childWindowId[64];
     sprintf_s(childWindowId, "AppGridRegion_%d", idx);
-
-    // 🚀 自動隱藏滾動條：僅在「滾動後短時間內」或「滑鼠懸停在滾動條上」時顯示，
-    //    其餘時間 0.25 秒淡出至完全透明。顯示狀態在子視窗內部更新，下一幀生效。
-    static float s_sbIdle = 99.0f;   // 距離上次滾動經過的秒數
-    static bool  s_sbHover = false;  // 滑鼠上一幀是否懸停在滾動條區域
-    float sbAlpha = 1.0f;
-    if (!s_sbHover && s_sbIdle > 1.5f)
-    {
-        sbAlpha = 1.0f - (s_sbIdle - 1.5f) * 4.0f; // 停止滾動 1.5s 後開始，0.25s 內淡出
-        if (sbAlpha < 0.0f) sbAlpha = 0.0f;
-    }
-    ImVec4 cBg     = ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarBg);          cBg.w *= sbAlpha;
-    ImVec4 cGrab   = ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarGrab);        cGrab.w *= sbAlpha;
-    ImVec4 cGrabH  = ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarGrabHovered); cGrabH.w *= sbAlpha;
-    ImVec4 cGrabA  = ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarGrabActive);  cGrabA.w *= sbAlpha;
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, cBg);
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, cGrab);
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, cGrabH);
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabActive, cGrabA);
-
-    ImGuiWindowFlags win_flags = 0;
+    ImGuiWindowFlags win_flags = ImGuiWindowFlags_NoScrollbar;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    if (ImGui::BeginChild(childWindowId, ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, win_flags))
+    ImGuiChildFlags c_flags = 0;
+    if (ImGui::BeginChild(childWindowId, ImVec2(0.0f, 0.0f), c_flags, win_flags))
     {
-        // 🚀 更新滾動條顯示狀態（供下一幀 sbAlpha 使用）
-        {
-            static float s_lastScrollY = -1.0f;
-            float curScrollY = ImGui::GetScrollY();
-            if (curScrollY != s_lastScrollY)
-            {
-                s_sbIdle = 0.0f;          // 滾動位置變化 → 重新點亮計時
-                s_lastScrollY = curScrollY;
-            }
-            s_sbIdle += ImGui::GetIO().DeltaTime;
-
-            // 滑鼠是否懸停在滾動條區域（子視窗右緣 ScrollbarSize 寬的縱向條帶）
-            s_sbHover = false;
-            if (ImGui::GetScrollMaxY() > 0.0f)
-            {
-                ImVec2 wPos = ImGui::GetWindowPos();
-                ImVec2 wSize = ImGui::GetWindowSize();
-                ImVec2 m = ImGui::GetIO().MousePos;
-                s_sbHover = (m.x >= wPos.x + wSize.x - ImGui::GetStyle().ScrollbarSize) &&
-                            (m.x <= wPos.x + wSize.x) &&
-                            (m.y >= wPos.y) && (m.y <= wPos.y + wSize.y);
-            }
-        }
-
         GridLayout g = CalcGridLayout(fud.m_bShowName, fud.gpvApp->size());
 
         float maxCalculatedY = g.startPos.y; // 用於追蹤最後一行涵蓋的最大高度位置
@@ -1043,7 +857,6 @@ void FolderUI::Render(HWND hwnd, FolderUIData& fud)
     ImGui::PopStyleVar();
 
     ImGui::EndChild(); // 💡 結束子視窗
-    ImGui::PopStyleColor(4); // 🚀 彈出自動隱藏滾動條的透明色
 }
 
 // ============================================================

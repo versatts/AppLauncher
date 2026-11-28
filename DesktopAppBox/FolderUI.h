@@ -19,7 +19,7 @@ struct ST_APP;
         float  itemSpacingY    = 4.0f;  // 圖標單元之間的縱向間距
         float  textBlockHeight = 22.0f;  // 文字塊的固定高度
         float  textGap         = 2.0f;   // 圖標與下方文字塊之間的微小間距
-        float  sidePadding      = 5.0f;  // 左右最小 Padding
+        float  sidePadding      = -12.0f;  // 左右最小 Padding
         float  topPadding      = 5.0f;   // 上邊沿固定的 Padding
 
         // 計算結果
@@ -41,7 +41,8 @@ public:
 	//    （拷貝到該項目 lnk/url 同目錄，並改名為同名覆蓋圖標）
 	//    返回 false = 沒有命中任何項目或拷貝失敗
 	bool ApplyIconToItem(POINT clientPt, const std::wstring& srcIconPath);
-
+private:
+    void RenderSetting();
 private:
 	// 每幀渲染時更新的項目格子矩形（客戶區絕對座標），供拖入命中測試
 	struct ItemRect
