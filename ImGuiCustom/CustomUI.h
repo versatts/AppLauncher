@@ -86,6 +86,7 @@ namespace CustomTab
 	// 開始一個自訂分頁列（可選傳入圖示、按鈕高度等外觀參數）
 	bool BeginTabBar(const char* str_id, ImGuiTabBarFlags flags = ImGuiTabBarFlags_None, bool bLine = true);
 
+	void SetNextItemWidth(float width);
 	// 渲染單個自訂分頁按鈕（內部封裝 CustomUI::IconTextToggleButton）
 	// 支援傳入可選圖示 icon 與 iconSize，若不傳則為純文字分頁按鈕，與原生 BeginTabItem 參數完全相容！
 	bool BeginTabItem(const char* label, bool* p_open = nullptr, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None,

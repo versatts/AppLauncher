@@ -1826,9 +1826,21 @@ namespace CustomTab
 		s_currentTabBarId = 0;
 		ImGui::PopID();
 	}
+
+	static float s_nextTabWidth = 0.0f;
+
+	void SetNextItemWidth(float width)
+	{
+		s_nextTabWidth = width;
+	}
+
 	bool BeginTabItem(const char* label, bool* p_open, ImGuiTabItemFlags flags,
 		ImTextureID icon, const ImVec2& iconSize)
 	{
+		// 取出本次設定的寬度並立即歸零（一次性生效）
+		float nextWidth = s_nextTabWidth;
+		s_nextTabWidth = 0.0f;
+
 		if (!s_currentTabBar)
 			return false;
 
@@ -1862,7 +1874,7 @@ namespace CustomTab
 			&toggleState,
 			label,
 			icon,
-			ImVec2(0.0f, 0.0f),
+			ImVec2(nextWidth, 0.0f),
 			iconSize,
 			true
 		);
