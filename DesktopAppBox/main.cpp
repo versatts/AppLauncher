@@ -978,8 +978,6 @@ void RenderOneFrame()
                 if (gTabUI.m_pendingTabMoveFrom > 0 && gTabUI.m_pendingTabMoveTo > 0)
                 {
                     gFUD.MoveFolder(gTabUI.m_pendingTabMoveFrom, gTabUI.m_pendingTabMoveTo);
-                    gTabUI.m_tabBarVersion++;
-                    gTabUI.m_restoreCountdown = 10;
                     gTabUI.m_pendingTabMoveFrom = -1;
                     gTabUI.m_pendingTabMoveTo = -1;
                 }

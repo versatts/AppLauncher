@@ -1,4 +1,5 @@
-#include "CustomUI.h"
+ï»¿#include "CustomUI.h"
+#include <unordered_map>
 #if IMGUI
  
 CustomUI::FnFillCustom CustomUI::s_pFnFillCustom = nullptr;
@@ -15,7 +16,7 @@ std::string CustomUI::searchTips;
 #include <cmath>
 
 // =========================================================================
-// ÄÚ²¿¸¨Öúº¯Êı 1£º»æÖÆÓÒ²à¼ıÍ·Í¼±ê£¨Ö§³Ö×Ô¶¨Òå ImTextureID ÓëÄ¬ÈÏÕÛÏß¼ıÍ·£©
+// å†…éƒ¨è¾…åŠ©å‡½æ•° 1ï¼šç»˜åˆ¶å³ä¾§ç®­å¤´å›¾æ ‡ï¼ˆæ”¯æŒè‡ªå®šä¹‰ ImTextureID ä¸é»˜è®¤æŠ˜çº¿ç®­å¤´ï¼‰
 // =========================================================================
 static void DrawComboArrow(
 	ImDrawList* draw_list,
@@ -74,7 +75,7 @@ static void DrawComboArrow(
 }
 
 // =========================================================================
-// ÄÚ²¿¸¨Öúº¯Êı 2£ºäÖÈ¾ÏÂÀ­ÁĞ±íÑ¡Ïî£¨Í³Ò»´¦ÀíÖØ¸´Ïî ID Óë¿Õ×Ö·û´®·À»¤£©
+// å†…éƒ¨è¾…åŠ©å‡½æ•° 2ï¼šæ¸²æŸ“ä¸‹æ‹‰åˆ—è¡¨é€‰é¡¹ï¼ˆç»Ÿä¸€å¤„ç†é‡å¤é¡¹ ID ä¸ç©ºå­—ç¬¦ä¸²é˜²æŠ¤ï¼‰
 // =========================================================================
 static bool RenderComboItems(const char* const items[], int items_count, int* current_item, const char* current_text = nullptr)
 {
@@ -136,7 +137,7 @@ bool CustomUI::IconTextButtonCore(const char* label, const ImVec2& btnSize, ImTe
 		}
 	}
 
-    // 1. Ó‹ËãƒÈÈİŒ’¶ÈÅc°´âo³ß´ç
+    // 1. è¨ˆç®—å…§å®¹å¯¬åº¦èˆ‡æŒ‰éˆ•å°ºå¯¸
     const float spacing = (labelSize.x > 1e-6 && iconSize.x > 1e-6) ? style.ItemInnerSpacing.x : 0.0f;
     float contentWidth = iconSize.x + spacing + labelSize.x;
     if (btnSize.x > 0.0f)
@@ -148,14 +149,14 @@ bool CustomUI::IconTextButtonCore(const char* label, const ImVec2& btnSize, ImTe
     if (size.y <= 0.0f)
         size.y = ImMax(iconSize.y, labelSize.y) + padY * 2.0f;
 
-    // 2. ÌÀí»¥„Ó î‘BÅcÑ¾ÖÔ]ƒÔ
+    // 2. è™•ç†äº’å‹•ç‹€æ…‹èˆ‡ä½ˆå±€è¨»å†Š
     const ImVec2 pos = window->DC.CursorPos;
     const ImRect bb(pos, ImVec2(pos.x + size.x, pos.y + size.y));
 
-    // ·ÖÅä UI ¿Õég£¬KÓ‹ËãÅÅ°æÓÎ˜Ë
+    // åˆ†é… UI ç©ºé–“ï¼Œä¸¦è¨ˆç®—æ’ç‰ˆæ¸¸æ¨™
     ImGui::ItemSize(size);
 
-    // È¡µÃÎ¨Ò»µÄÔª¼ş ID£¬K¼ÓÈëµ½Ò•´°²Ã¼ôÅĞ¶¨ÖĞ
+    // å–å¾—å”¯ä¸€çš„å…ƒä»¶ IDï¼Œä¸¦åŠ å…¥åˆ°è¦–çª—è£å‰ªåˆ¤å®šä¸­
 	ImGuiID id;
 	if (label)
 		id = window->GetID(label);
@@ -167,14 +168,14 @@ bool CustomUI::IconTextButtonCore(const char* label, const ImVec2& btnSize, ImTe
         return false;
     }
 
-    // †¢ÓÃ´ËÔª¼şµÄŒ§Ó[ˆDŒÓ£¬ÔÊÔSæI±PßxÈ¡
+    // å•Ÿç”¨æ­¤å…ƒä»¶çš„å°è¦½åœ–å±¤ï¼Œå…è¨±éµç›¤é¸å–
     window->DC.NavLayersActiveMaskNext |= (1 << window->DC.NavLayerCurrent);
 
-    // Í¬•rÌÀí»¬ÊóÅcæI±P°´‰ºÊÂ¼şµÄºËĞÄº¯”µ
+    // åŒæ™‚è™•ç†æ»‘é¼ èˆ‡éµç›¤æŒ‰å£“äº‹ä»¶çš„æ ¸å¿ƒå‡½æ•¸
     bool hovered, held;
     bool pressed = ImGui::ButtonBehavior(bb, id, &hovered, &held, ImGuiButtonFlags_None);
 
-    // 3. Ó‹Ëã±³¾°¡¢ÎÄ×ÖÅcˆDÊ¾îÉ«£¨²»²Ù×÷È«Óò Style Stack£©
+    // 3. è¨ˆç®—èƒŒæ™¯ã€æ–‡å­—èˆ‡åœ–ç¤ºé¡è‰²ï¼ˆä¸æ“ä½œå…¨åŸŸ Style Stackï¼‰
     const bool isDimmed = (isToggledBtn && !bToggled);
     const float contentAlpha = isDimmed ? 0.7f : 1.0f;
 
@@ -189,7 +190,7 @@ bool CustomUI::IconTextButtonCore(const char* label, const ImVec2& btnSize, ImTe
             ((isToggledBtn && bToggled)) ? ImGuiCol_ButtonActive : ImGuiCol_Button)
     );
 
-    // 4. ÀLÑu±³¾°Åcß…¿ò
+    // 4. ç¹ªè£½èƒŒæ™¯èˆ‡é‚Šæ¡†
     ImDrawList* drawList = window->DrawList;
     const ImVec2 rectMax(pos.x + size.x, pos.y + size.y);
     float fRounding = style.FrameRounding;
@@ -207,7 +208,7 @@ bool CustomUI::IconTextButtonCore(const char* label, const ImVec2& btnSize, ImTe
     if (style.FrameBorderSize > 0.0f)
         drawList->AddRect(pos, rectMax, ImGui::GetColorU32(ImGuiCol_Border), fRounding, 0, style.FrameBorderSize);
 
-    // ¡¾ĞÂÔöß@¶Î¡¿®”Íæ¼ÒÓÃæI±P Tab ÇĞ“Qµ½´Ë°´âo•r£¬®‹³ößxÈ¡¸ßÁÁ¿ò
+    // ã€æ–°å¢é€™æ®µã€‘ç•¶ç©å®¶ç”¨éµç›¤ Tab åˆ‡æ›åˆ°æ­¤æŒ‰éˆ•æ™‚ï¼Œç•«å‡ºé¸å–é«˜äº®æ¡†
     if (ImGui::GetFocusID() == id)
     {
         ImGui::RenderNavHighlight(bb, id);
@@ -215,16 +216,16 @@ bool CustomUI::IconTextButtonCore(const char* label, const ImVec2& btnSize, ImTe
 
     if (isToggledBtn && bToggled)
     {
-        // ·½°¸ A£ºÊ¹ÓÃ ImGui îAÔOµÄ¸ßÁÁË{É«£¨ÍÆË]£¬•ş¸úëSÖ÷î}ïL¸ñ×ƒ“QÇÒÖ§Ô® Disabled Í¸Ã÷¶È£©
+        // æ–¹æ¡ˆ Aï¼šä½¿ç”¨ ImGui é è¨­çš„é«˜äº®è—è‰²ï¼ˆæ¨è–¦ï¼Œæœƒè·Ÿéš¨ä¸»é¡Œé¢¨æ ¼è®Šæ›ä¸”æ”¯æ´ Disabled é€æ˜åº¦ï¼‰
         const ImU32 lineCol = ImGui::GetColorU32(ImGuiCol_NavHighlight);
 
-        // ·½°¸ B£ºÈç¹ûÄúÏëÒªŠÖÆÖ¸¶¨ÌØ¶¨Ë{É«£¨ÀıÈç¼ƒË{£©£¬Õˆ½âé_ÏÂ·½Ô]½âKÌæ“Q lineCol£º
-        // const ImU32 lineCol = ImGui::GetColorU32(ImVec4(0.0f, 0.47f, 0.83f, style.Alpha)); // ¿¼‘]ÁË Disabled µÄ Alpha
+        // æ–¹æ¡ˆ Bï¼šå¦‚æœæ‚¨æƒ³è¦å¼·åˆ¶æŒ‡å®šç‰¹å®šè—è‰²ï¼ˆä¾‹å¦‚ç´”è—ï¼‰ï¼Œè«‹è§£é–‹ä¸‹æ–¹è¨»è§£ä¸¦æ›¿æ› lineColï¼š
+        // const ImU32 lineCol = ImGui::GetColorU32(ImVec4(0.0f, 0.47f, 0.83f, style.Alpha)); // è€ƒæ…®äº† Disabled çš„ Alpha
 
         const float lineWidth = size.y * 0.05f;
 
-        // Ó‹Ëã¾€¶ÎµÄÆğücÅc½Küc£¨Î»ì¶°´âoµÄ×îµ×¶Ë£©
-        // éÁË±ÜÃâ¾€¶Î³¬³öˆA½Ç£¬ƒÉ¶Ë¸÷ÍùƒÈ¿s 1 ÏñËØ£¨¿ÉÒÀÒ•ÓXĞèÇóÕ{Õû£©
+        // è¨ˆç®—ç·šæ®µçš„èµ·é»èˆ‡çµ‚é»ï¼ˆä½æ–¼æŒ‰éˆ•çš„æœ€åº•ç«¯ï¼‰
+        // ç‚ºäº†é¿å…ç·šæ®µè¶…å‡ºåœ“è§’ï¼Œå…©ç«¯å„å¾€å…§ç¸® 1 åƒç´ ï¼ˆå¯ä¾è¦–è¦ºéœ€æ±‚èª¿æ•´ï¼‰
         ImVec2 lineStart(pos.x, pos.y + size.y - lineWidth);
         ImVec2 lineEnd(pos.x + size.x, pos.y + size.y);
 
@@ -232,7 +233,7 @@ bool CustomUI::IconTextButtonCore(const char* label, const ImVec2& btnSize, ImTe
     }
 
 
-    // 5. Ó‹ËãÖÃÖĞÆğücKÀLÑuˆDÊ¾ÅcÎÄ×Ö
+    // 5. è¨ˆç®—ç½®ä¸­èµ·é»ä¸¦ç¹ªè£½åœ–ç¤ºèˆ‡æ–‡å­—
     float currentX = pos.x + (size.x - contentWidth) * 0.5f;
 
     if (icon != 0 && iconSize.x > 0.0f && iconSize.y > 0.0f)
@@ -265,27 +266,27 @@ bool CustomUI::IconTextButtonCore(const char* label, const ImVec2& btnSize, ImTe
 }
 
 
-constexpr float kPadding = 16.0f;        // ÍâÎ§ÄÚ±ß¾à
+constexpr float kPadding = 16.0f;        // å¤–å›´å†…è¾¹è·
 
-// ÊÓÍ¼Ä£Ê½
+// è§†å›¾æ¨¡å¼
 enum CalendarView {
-	VIEW_DATE,    // ÈÕÆÚÑ¡Ôñ
-	VIEW_YEAR,    // Äê·İÑ¡Ôñ
-	VIEW_MONTH    // ÔÂ·İÑ¡Ôñ
+	VIEW_DATE,    // æ—¥æœŸé€‰æ‹©
+	VIEW_YEAR,    // å¹´ä»½é€‰æ‹©
+	VIEW_MONTH    // æœˆä»½é€‰æ‹©
 };
 
-// ÈÕÆÚÊı¾İ
-static int g_dispYear = 2025, g_dispMonth = 10;  // µ±Ç°ÏÔÊ¾µÄÄêÔÂ
+// æ—¥æœŸæ•°æ®
+static int g_dispYear = 2025, g_dispMonth = 10;  // å½“å‰æ˜¾ç¤ºçš„å¹´æœˆ
 static CalendarView g_view = VIEW_DATE;
 
-// Äê·İÑ¡Ôñ·¶Î§
+// å¹´ä»½é€‰æ‹©èŒƒå›´
 static int g_yearStart = 2014, g_yearEnd = 2025;
-static int g_yearPageStart = 2014;  // µ±Ç°Ò³ÆğÊ¼Äê·İ
+static int g_yearPageStart = 2014;  // å½“å‰é¡µèµ·å§‹å¹´ä»½
 
-// µ¯´°×´Ì¬
+// å¼¹çª—çŠ¶æ€
 static bool g_showCalendar = false;
 static ImVec2 g_calendarPos;
-static int g_currentField = 0;  // 0=ÆğÊ¼, 1=½áÊø
+static int g_currentField = 0;  // 0=èµ·å§‹, 1=ç»“æŸ
 
 constexpr float kBtnSize = 32.0f;
 constexpr float kCellSize = 24.0f;
@@ -298,7 +299,7 @@ constexpr int kCols = 7;
 constexpr int kYearCols = 3;
 constexpr int kMonthCols = 3;
 
-// µ¯´°¿í¶È = 16 + 7*24 + 6*16 + 16 = 296
+// å¼¹çª—å®½åº¦ = 16 + 7*24 + 6*16 + 16 = 296
 constexpr float kCalendarWidth = kGridPadding * 2 + kCols * kCellSize + (kCols - 1) * kCellGap;
 
 int GetDaysInMonth(int year, int month) {
@@ -315,8 +316,8 @@ int GetWeekday(int year, int month, int day) {
 	tm_info.tm_mday = day;
 	tm_info.tm_isdst = -1;
 	mktime(&tm_info);
-	int wday = tm_info.tm_wday;  // 0=ÖÜÈÕ
-	return (wday == 0) ? 6 : wday - 1;  // ×ªÎª 0=ÖÜÒ»
+	int wday = tm_info.tm_wday;  // 0=å‘¨æ—¥
+	return (wday == 0) ? 6 : wday - 1;  // è½¬ä¸º 0=å‘¨ä¸€
 }
 
 bool DrawNavButton(const char* label, ImVec2 pos, float size = kBtnSize) {
@@ -327,15 +328,15 @@ bool DrawNavButton(const char* label, ImVec2 pos, float size = kBtnSize) {
 		mouse.y >= pos.y && mouse.y <= pos.y + size);
 	bool clicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 
-	// ±³¾°
-	ImU32 bgColor = clicked ? IM_COL32(100, 200, 200, 255) :  // ÂÌÉ«£¨µã»÷£©
-		(hovered ? IM_COL32(80, 80, 100, 255) : IM_COL32(0, 0, 0, 0));  // »ÒÉ«£¨ĞüÍ££©
+	// èƒŒæ™¯
+	ImU32 bgColor = clicked ? IM_COL32(100, 200, 200, 255) :  // ç»¿è‰²ï¼ˆç‚¹å‡»ï¼‰
+		(hovered ? IM_COL32(80, 80, 100, 255) : IM_COL32(0, 0, 0, 0));  // ç°è‰²ï¼ˆæ‚¬åœï¼‰
 
 	if (hovered || clicked) {
 		dl->AddRectFilled(pos, ImVec2(pos.x + size, pos.y + size), bgColor, 4.0f);
 	}
 
-	// ÎÄ×Ö
+	// æ–‡å­—
 	ImVec2 textSize = ImGui::CalcTextSize(label);
 	ImVec2 textPos(pos.x + (size - textSize.x) * 0.5f,
 		pos.y + (size - textSize.y) * 0.5f);
@@ -354,24 +355,24 @@ bool DrawDateCell(const char* label, ImVec2 pos, bool isSelected, bool isCurrent
 		mouse.y >= pos.y && mouse.y <= pos.y + kCellSize);
 	bool clicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 
-	// ±³¾°
+	// èƒŒæ™¯
 	ImU32 bgColor;
 	if (isSelected) {
-		bgColor = IM_COL32(100, 200, 200, 255);  // Ñ¡ÖĞÂÌÉ«
+		bgColor = IM_COL32(100, 200, 200, 255);  // é€‰ä¸­ç»¿è‰²
 	}
 	else if (clicked) {
-		bgColor = IM_COL32(100, 200, 200, 255);  // µã»÷ÂÌÉ«
+		bgColor = IM_COL32(100, 200, 200, 255);  // ç‚¹å‡»ç»¿è‰²
 	}
 	else if (hovered) {
-		bgColor = IM_COL32(80, 80, 100, 255);    // ĞüÍ£»ÒÉ«
+		bgColor = IM_COL32(80, 80, 100, 255);    // æ‚¬åœç°è‰²
 	}
 	else {
-		return false;  // ÎŞ×´Ì¬²»»æÖÆ±³¾°
+		return false;  // æ— çŠ¶æ€ä¸ç»˜åˆ¶èƒŒæ™¯
 	}
 
 	dl->AddRectFilled(pos, ImVec2(pos.x + kCellSize, pos.y + kCellSize), bgColor);//, 3.0f
 
-	// ÎÄ×Ö
+	// æ–‡å­—
 	ImVec2 textSize = ImGui::CalcTextSize(label);
 	ImVec2 textPos(pos.x + (kCellSize - textSize.x) * 0.5f,
 		pos.y + (kCellSize - textSize.y) * 0.5f);
@@ -390,7 +391,7 @@ bool DrawYearCell(int year, ImVec2 pos, bool isSelected) {
 	snprintf(buf, sizeof(buf), "%d", year);
 	ImVec2 textSize = ImGui::CalcTextSize(buf);
 
-	// µ¥Ôª¸ñÇøÓò£¨±ÈÎÄ×Ö´óÒ»Ğ©£¬·½±ãµã»÷£©
+	// å•å…ƒæ ¼åŒºåŸŸï¼ˆæ¯”æ–‡å­—å¤§ä¸€äº›ï¼Œæ–¹ä¾¿ç‚¹å‡»ï¼‰
 	float cellW = 56.0f;
 	float cellH = 24.0f;
 // 	ImVec2 cellPos(pos.x - (cellW - textSize.x) * 0.5f,
@@ -480,8 +481,8 @@ bool DrawDateView(ImDrawList* dl, ImVec2 winPos, int* year, int* month, int* day
 		g_dispMonth == 1 ? g_dispYear - 1 : g_dispYear,
 		g_dispMonth == 1 ? 12 : g_dispMonth - 1);
 
-	// ĞÇÆÚĞĞ
-// 	const char* weekNames[] = { u8"Ò»", u8"¶ş", u8"Èı", u8"ËÄ", u8"Îå", u8"Áù", u8"ÈÕ" };
+	// æ˜ŸæœŸè¡Œ
+// 	const char* weekNames[] = { u8"ä¸€", u8"äºŒ", u8"ä¸‰", u8"å››", u8"äº”", u8"å…­", u8"æ—¥" };
 	for (int dow = 0; dow < 7; dow++) {
 		float cellX = x + dow * (kCellSize + kCellGap);
 		ImVec2 textPos(cellX + (kCellSize - ImGui::CalcTextSize(CustomUI::weekdays[dow].c_str()).x) * 0.5f, y);
@@ -491,7 +492,7 @@ bool DrawDateView(ImDrawList* dl, ImVec2 winPos, int* year, int* month, int* day
 
 	y += kCellSize + kCellGap;
 
-	// ÈÕÆÚÍø¸ñ
+	// æ—¥æœŸç½‘æ ¼
 	int iday = 1;
 	int nextMonthDay = 1;
 
@@ -532,18 +533,18 @@ bool DrawDateView(ImDrawList* dl, ImVec2 winPos, int* year, int* month, int* day
 				textColor = IM_COL32(120, 120, 140, 255);
 			}
 
-			// »æÖÆ±³¾°£¨ĞüÍ£/Ñ¡ÖĞ£©
+			// ç»˜åˆ¶èƒŒæ™¯ï¼ˆæ‚¬åœ/é€‰ä¸­ï¼‰
 			DrawDateCell(buf, cellPos,
 				(isCurrentMonth && cellDay == *day && g_dispMonth == *month && g_dispYear == *year),//g_calDay
 				isCurrentMonth);
 
-			// »æÖÆÎÄ×Ö£¨Èç¹ûÃ»ÓĞ±³¾°£©
+			// ç»˜åˆ¶æ–‡å­—ï¼ˆå¦‚æœæ²¡æœ‰èƒŒæ™¯ï¼‰
 			ImVec2 textSize = ImGui::CalcTextSize(buf);
 			ImVec2 textPos(cellPos.x + (kCellSize - textSize.x) * 0.5f,
 				cellPos.y + (kCellSize - textSize.y) * 0.5f);
 			dl->AddText(textPos, textColor, buf);
 
-			// µã»÷
+			// ç‚¹å‡»
 			ImVec2 mouse = ImGui::GetIO().MousePos;
 			bool hovered = (mouse.x >= cellPos.x && mouse.x <= cellPos.x + kCellSize &&
 				mouse.y >= cellPos.y && mouse.y <= cellPos.y + kCellSize);
@@ -551,7 +552,7 @@ bool DrawDateView(ImDrawList* dl, ImVec2 winPos, int* year, int* month, int* day
 				*day = cellDay;
 				*month = g_dispMonth;
 				*year = g_dispYear;
-				// Í¨ÖªÍâ²¿
+				// é€šçŸ¥å¤–éƒ¨
 				date_changed = true;
 			}
 		}
@@ -572,7 +573,7 @@ bool DrawYearView(ImDrawList* dl, ImVec2 winPos, int* paramY) {
 	float x = winPos.x + 56 / 2 + 2;
 	float y = winPos.y + kGridPadding + kGridPadding + kCellGap + 24 + 12 + 8; //kGridPadding + kCellSize + 
 
-	int yearsPerPage = 12;  // 3ÁĞ ¡Á 4ĞĞ
+	int yearsPerPage = 12;  // 3åˆ— Ã— 4è¡Œ
 	int year = g_yearPageStart;
 
 	for (int row = 0; row < 4; row++) {
@@ -587,8 +588,8 @@ bool DrawYearView(ImDrawList* dl, ImVec2 winPos, int* paramY) {
 // 				g_calYear = year;
 				g_dispYear = year;
 				*paramY = year;
-				g_view = VIEW_MONTH;  // Ìø×ªµ½ÔÂ·İÑ¡Ôñ
-				g_yearPageStart = year - (year % 12);  // µ÷ÕûÒ³ÆğÊ¼
+				g_view = VIEW_MONTH;  // è·³è½¬åˆ°æœˆä»½é€‰æ‹©
+				g_yearPageStart = year - (year % 12);  // è°ƒæ•´é¡µèµ·å§‹
 				date_changed = true;
 			}
 
@@ -618,7 +619,7 @@ bool DrawMonthView(ImDrawList* dl, ImVec2 winPos, int* paramY, int* paramM) {
 			if (DrawMonthCell(month, cellPos, isSelected)) {
 				g_dispMonth = month;
 				*paramM = month;
-				g_view = VIEW_DATE;  // ·µ»ØÈÕÆÚÑ¡Ôñ
+				g_view = VIEW_DATE;  // è¿”å›æ—¥æœŸé€‰æ‹©
 				date_changed = true;
 			}
 		}
@@ -629,7 +630,7 @@ bool DrawMonthView(ImDrawList* dl, ImVec2 winPos, int* paramY, int* paramM) {
 
 constexpr float kCalendarHeight = 288.0f;
 
-// ÈÕÀúµ¯´°
+// æ—¥å†å¼¹çª—
 bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 	bool date_changed = false;
 	if (g_showCalendar) {
@@ -641,7 +642,7 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 
 	ImGui::SetNextWindowSize(ImVec2(kCalendarWidth, kCalendarHeight));
 
-	// Ã¿Ö¡¶¼ Push
+	// æ¯å¸§éƒ½ Push
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::PushStyleColor(ImGuiCol_WindowBg, IMVEC4("#37373D"));
@@ -654,19 +655,19 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 		ImVec2 winPos = ImGui::GetWindowPos();
 		float winW = kCalendarWidth;
 
-		// ===== µÚÒ»ĞĞ£º°´Å¥ + ±êÌâ =====
+		// ===== ç¬¬ä¸€è¡Œï¼šæŒ‰é’® + æ ‡é¢˜ =====
 		float headerY = winPos.y + kHeaderPaddingY;
 
-		// ×ó²àÁ½¸ö°´Å¥£¨0¼ä¸ô£©
+		// å·¦ä¾§ä¸¤ä¸ªæŒ‰é’®ï¼ˆ0é—´éš”ï¼‰
 		ImVec2 btn1Pos(winPos.x + kHeaderPaddingX, headerY);
 		ImVec2 btn2Pos(btn1Pos.x + kBtnSize, headerY);
 
-		// ÓÒ²àÁ½¸ö°´Å¥
+		// å³ä¾§ä¸¤ä¸ªæŒ‰é’®
 		ImVec2 btn3Pos(winPos.x + winW - kHeaderPaddingX - kBtnSize * 2, headerY);
 		ImVec2 btn4Pos(btn3Pos.x + kBtnSize, headerY);
 
 		if (g_view == VIEW_DATE) {
-			// ÈÕÆÚÊÓÍ¼£º4¸ö°´Å¥
+			// æ—¥æœŸè§†å›¾ï¼š4ä¸ªæŒ‰é’®
 			if (DrawNavButton(u8"<<", btn1Pos)) {
 				(*year)--;
 // 				g_yearPageStart = *year - (*year % 12);
@@ -694,28 +695,28 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 				date_changed = true;
 			}
 
-			// ±êÌâ¾ÓÖĞ
+			// æ ‡é¢˜å±…ä¸­
 // 			char titleBuf[64];
-// 			snprintf(titleBuf, sizeof(titleBuf), u8"%dÄê %dÔÂ", g_dispYear, g_dispMonth);
+// 			snprintf(titleBuf, sizeof(titleBuf), u8"%då¹´ %dæœˆ", g_dispYear, g_dispMonth);
 // 			ImVec2 titleSize = ImGui::CalcTextSize(titleBuf);
 // 			float titleX = winPos.x + (winW - titleSize.x) * 0.5f;
 // 			float titleY = headerY + (kBtnSize - titleSize.y) * 0.5f;
 
 			char yearBuf[16];
-// 			snprintf(yearBuf, sizeof(yearBuf), u8"%dÄê", g_dispYear);
+// 			snprintf(yearBuf, sizeof(yearBuf), u8"%då¹´", g_dispYear);
 			snprintf(yearBuf, sizeof(yearBuf), u8"%d%s", *year, CustomUI::unitYear.c_str());
 			char monthBuf[16];
 			snprintf(monthBuf, sizeof(monthBuf), u8"%d%s", *month, CustomUI::unitMonth.c_str());
 
 			ImVec2 yearSize = ImGui::CalcTextSize(yearBuf);
 			ImVec2 monthSize = ImGui::CalcTextSize(monthBuf);
-			float spaceW = kHeaderPaddingX;// ImGui::CalcTextSize(" ").x;  // ÄêºÍÔÂÖ®¼äµÄ¿Õ¸ñ
-			// ¼ÆËã×Ü¿í¶È£¬¾ÓÖĞ
+			float spaceW = kHeaderPaddingX;// ImGui::CalcTextSize(" ").x;  // å¹´å’Œæœˆä¹‹é—´çš„ç©ºæ ¼
+			// è®¡ç®—æ€»å®½åº¦ï¼Œå±…ä¸­
 			float totalW = yearSize.x + spaceW + monthSize.x;
 			float yearX = winPos.x + (winW - totalW) * 0.5f;
 			float monthX = yearX + yearSize.x + spaceW;
 			float titleY = headerY + (kBtnSize - yearSize.y) * 0.5f;
-			//  ÄêÇøÓò£ºµã»÷ÇøÓò = ÎÄ×ÖÇøÓò + padding
+			//  å¹´åŒºåŸŸï¼šç‚¹å‡»åŒºåŸŸ = æ–‡å­—åŒºåŸŸ + padding
 			float padX = 4.0f, padY = 3.0f;
 			ImVec2 yearBtnMin(yearX - padX, titleY - padY);
 			ImVec2 yearBtnMax(yearX + yearSize.x + padX, titleY + yearSize.y + padY);
@@ -729,15 +730,15 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 			bool monthHovered = (mouse.x >= monthBtnMin.x && mouse.x <= monthBtnMax.x &&
 				mouse.y >= monthBtnMin.y && mouse.y <= monthBtnMax.y);
 
-			//  »æÖÆÄêÇøÓò±³¾°
+			//  ç»˜åˆ¶å¹´åŒºåŸŸèƒŒæ™¯
 // 			if (yearHovered) {
 // 				dl->AddRectFilled(yearBtnMin, yearBtnMax,
-// 					IM_COL32(80, 80, 100, 255), 3.0f);  // »ÒÉ«ĞüÍ£
+// 					IM_COL32(80, 80, 100, 255), 3.0f);  // ç°è‰²æ‚¬åœ
 // 			}
-// 			//  »æÖÆÔÂÇøÓò±³¾°
+// 			//  ç»˜åˆ¶æœˆåŒºåŸŸèƒŒæ™¯
 // 			if (monthHovered) {
 // 				dl->AddRectFilled(monthBtnMin, monthBtnMax,
-// 					IM_COL32(80, 80, 100, 255), 3.0f);  // »ÒÉ«ĞüÍ£
+// 					IM_COL32(80, 80, 100, 255), 3.0f);  // ç°è‰²æ‚¬åœ
 // 			}
 
 			ImU32 yearTextColor = yearHovered ? IM_COL32(100, 200, 200, 255)
@@ -745,35 +746,35 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 			ImU32 monthTextColor = monthHovered ? IM_COL32(100, 200, 200, 255)
 				: IM_COL32(255, 255, 255, 255);
 
-			//  »æÖÆÄêÎÄ×Ö
+			//  ç»˜åˆ¶å¹´æ–‡å­—
 			ImGui::PushStyleColor(ImGuiCol_Text, yearTextColor);
 			ImGui::SetCursorScreenPos(ImVec2(yearX, titleY));
 			ImGui::SetCursorScreenPos(ImVec2(yearX, titleY));
 			ImGui::TextUnformatted(yearBuf);
 			ImGui::PopStyleColor();
 
-			//  »æÖÆÔÂÎÄ×Ö
+			//  ç»˜åˆ¶æœˆæ–‡å­—
 			ImGui::SetCursorScreenPos(ImVec2(monthX, titleY));
 			ImGui::PushStyleColor(ImGuiCol_Text, monthTextColor);
 			ImGui::SetCursorScreenPos(ImVec2(monthX, titleY));
 			ImGui::TextUnformatted(monthBuf);
 			ImGui::PopStyleColor();
 
-			//  µã»÷Äê ¡ú Ìø×ªÄê·İÑ¡Ôñ
+			//  ç‚¹å‡»å¹´ â†’ è·³è½¬å¹´ä»½é€‰æ‹©
 			if (yearHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
 				g_view = VIEW_YEAR;
 // 				g_yearPageStart = g_dispYear - (g_dispYear % 12);
 				g_yearPageStart = *year - (*year % 12);
 			}
 
-			//  µã»÷ÔÂ ¡ú Ìø×ªÔÂ·İÑ¡Ôñ
+			//  ç‚¹å‡»æœˆ â†’ è·³è½¬æœˆä»½é€‰æ‹©
 			if (monthHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
 				g_view = VIEW_MONTH;
 			}
 
 // 			dl->AddText(ImVec2(titleX, titleY), IM_COL32(255, 255, 255, 255), titleBuf);
 // 
-// 			// µã»÷±êÌâÌø×ªµ½Äê·İÑ¡Ôñ
+// 			// ç‚¹å‡»æ ‡é¢˜è·³è½¬åˆ°å¹´ä»½é€‰æ‹©
 // 			ImVec2 mouse = ImGui::GetIO().MousePos;
 // 			if (mouse.x >= titleX && mouse.x <= titleX + titleSize.x &&
 // 				mouse.y >= titleY && mouse.y <= titleY + titleSize.y) {
@@ -785,7 +786,7 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 
 		}
 		else if (g_view == VIEW_YEAR) {
-			// Äê·İÊÓÍ¼£º2¸ö°´Å¥
+			// å¹´ä»½è§†å›¾ï¼š2ä¸ªæŒ‰é’®
 			if (DrawNavButton(u8"<<", btn1Pos)) {
 				g_yearPageStart -= 12;
 				date_changed = true;
@@ -795,7 +796,7 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 				date_changed = true;
 			}
 
-			// ±êÌâ
+			// æ ‡é¢˜
 			char titleBuf[64];
 			snprintf(titleBuf, sizeof(titleBuf), u8"%d-%d", g_yearPageStart, g_yearPageStart + 11);
 			ImVec2 titleSize = ImGui::CalcTextSize(titleBuf);
@@ -805,7 +806,7 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 
 		}
 		else if (g_view == VIEW_MONTH) {
-			// ÔÂ·İÊÓÍ¼£º2¸ö°´Å¥
+			// æœˆä»½è§†å›¾ï¼š2ä¸ªæŒ‰é’®
 			if (DrawNavButton(u8"<<", btn1Pos)) {
 // 				g_dispYear--;
 				(*year)--;
@@ -817,10 +818,10 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 				date_changed = true;
 			}
 
-			// ±êÌâ
+			// æ ‡é¢˜
 			char titleBuf[64];
 
-// 			snprintf(titleBuf, sizeof(titleBuf), u8"%dÄê", g_dispYear);
+// 			snprintf(titleBuf, sizeof(titleBuf), u8"%då¹´", g_dispYear);
 			snprintf(titleBuf, sizeof(titleBuf), u8"%d%s", *year, CustomUI::unitYear.c_str());
 			ImVec2 titleSize = ImGui::CalcTextSize(titleBuf);
 			float titleX = winPos.x + (winW - titleSize.x) * 0.5f;
@@ -828,12 +829,12 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 			dl->AddText(ImVec2(titleX, titleY), IM_COL32(255, 255, 255, 255), titleBuf);
 		}
 
-		// ===== ·Ö¸ôÏß =====
+		// ===== åˆ†éš”çº¿ =====
 		float sepY = headerY + kBtnSize + kHeaderPaddingY;//kSeparatorY
 		dl->AddLine(ImVec2(winPos.x, sepY), ImVec2(winPos.x + winW, sepY),
 			IM_COL32(100, 100, 120, 255), 1.0f);
 
-		// ===== ÄÚÈİÇøÓò =====
+		// ===== å†…å®¹åŒºåŸŸ =====
 		if (g_view == VIEW_DATE) {
 			if (date_changed)
 			{
@@ -875,7 +876,7 @@ bool DrawCalendarPopup(const char* id, int* year, int* month, int* day) {
 }
 
 constexpr float kDateInputWidth = 160.0f;
-constexpr float kInputGap = 4.0f;  // ÊäÈë¿òºÍÍ¼±êÖ®¼äµÄ¼ä¾à
+constexpr float kInputGap = 4.0f;  // è¾“å…¥æ¡†å’Œå›¾æ ‡ä¹‹é—´çš„é—´è·
 
 void DrawDateInput(const char* label, std::string* text, int* year, int* month, int* day, int fieldIndex, ImTextureID icon) {
 	float width = ImGui::CalcItemWidth();//  160.0f;
@@ -885,17 +886,17 @@ void DrawDateInput(const char* label, std::string* text, int* year, int* month, 
 	
 	ImVec2 cursor_pos = ImGui::GetCursorScreenPos();
 
-	// ===== ×ó²à£ºÎÄ±¾ÊäÈë¿ò =====
+	// ===== å·¦ä¾§ï¼šæ–‡æœ¬è¾“å…¥æ¡† =====
 	float inputW = kDateInputWidth;
 	ImGui::SetNextItemWidth(width);
 
-	//  ÓÃ InputText Ìæ´ú InvisibleButton£¬ÔÊĞíÓÃ»§ÊÖ¶¯ÊäÈë
+	//  ç”¨ InputText æ›¿ä»£ InvisibleButtonï¼Œå…è®¸ç”¨æˆ·æ‰‹åŠ¨è¾“å…¥
 	char buf[64];
 	strncpy_s(buf, sizeof(buf), text->c_str(), _TRUNCATE);
 
 	if (ImGui::InputText(label, buf, sizeof(buf), ImGuiInputTextFlags_AutoSelectAll)) {
 		*text = buf;
-		// ³¢ÊÔ½âÎöÊäÈëµÄÈÕÆÚ
+		// å°è¯•è§£æè¾“å…¥çš„æ—¥æœŸ
 		int y, m, d;
 		if (sscanf(buf, "%d/%d/%d", &y, &m, &d) == 3) {
 			*year = y; *month = m; *day = d;
@@ -905,7 +906,7 @@ void DrawDateInput(const char* label, std::string* text, int* year, int* month, 
 		}
 	}
 
-	// ±³¾°ºÍ±ß¿ò
+	// èƒŒæ™¯å’Œè¾¹æ¡†
 // 	dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height),
 // 		IM_COL32(30, 30, 35, 255), 4.0f);
 // 
@@ -917,7 +918,7 @@ void DrawDateInput(const char* label, std::string* text, int* year, int* month, 
 	dl->AddRect(pos, ImVec2(pos.x + width, pos.y + height),
 		borderColor);//, 4.0f, 0, isHovered ? 1.5f : 1.0f
 // 
-// 	// ÈÕÆÚÎÄ±¾
+// 	// æ—¥æœŸæ–‡æœ¬
 // 	float textY = pos.y + (height - ImGui::GetTextLineHeight()) * 0.5f;
 // 	if (*day > 0 && *month > 0 && *year > 0) {
 // 		char buf[32];
@@ -925,15 +926,15 @@ void DrawDateInput(const char* label, std::string* text, int* year, int* month, 
 // 		dl->AddText(ImVec2(pos.x + 8, textY), IM_COL32(200, 200, 220, 255), buf);
 // 	}
 // 	else {
-// 		dl->AddText(ImVec2(pos.x + 8, textY), IM_COL32(120, 120, 140, 255), u8"ÇëÑ¡ÔñÈÕÆÚ");
+// 		dl->AddText(ImVec2(pos.x + 8, textY), IM_COL32(120, 120, 140, 255), u8"è¯·é€‰æ‹©æ—¥æœŸ");
 // 	}
 
-	 // ===== ÓÒ²à£ºÈÕÀúÍ¼±ê°´Å¥ =====
+	 // ===== å³ä¾§ï¼šæ—¥å†å›¾æ ‡æŒ‰é’® =====
 // 	ImGui::SameLine(0, kInputGap);
 	ImGui::SameLine();
 
 	ImVec2 mouse_pos = ImGui::GetIO().MousePos;
-	// »æÖÆÈÕÀúÍ¼±ê£¨ÓÒ²à£©
+	// ç»˜åˆ¶æ—¥å†å›¾æ ‡ï¼ˆå³ä¾§ï¼‰
 	
 	float icon_size = 24.0f;
 	float icon_padding = 4.0f;
@@ -963,10 +964,10 @@ void DrawDateInput(const char* label, std::string* text, int* year, int* month, 
 	}
 	ImGui::PopID();
 	i++;
-	// ÒşĞÎ°´Å¥ÓÃÓÚµã»÷¼ì²â
+	// éšå½¢æŒ‰é’®ç”¨äºç‚¹å‡»æ£€æµ‹
 	ImGui::SetCursorScreenPos(pos);
 	ImGui::InvisibleButton(("##icon_" + std::string(label)).c_str(), ImVec2(width, height));
-	// ¼ì²âÈÕÀúÍ¼±êÇøÓòµã»÷
+	// æ£€æµ‹æ—¥å†å›¾æ ‡åŒºåŸŸç‚¹å‡»
 	bool icon_hovered = (mouse_pos.x >= icon_pos.x && mouse_pos.x <= icon_pos.x + icon_size &&
 		mouse_pos.y >= icon_pos.y && mouse_pos.y <= icon_pos.y + icon_size);
 
@@ -974,7 +975,7 @@ void DrawDateInput(const char* label, std::string* text, int* year, int* month, 
 		g_currentField = fieldIndex;
 		g_calendarPos = ImVec2(pos.x, pos.y + height + 4);
 
-		// Èç¹ûÊäÈë¿òÓĞÈÕÆÚ£¬ÏÔÊ¾ÊäÈë¿òµÄÈÕÆÚ£»·ñÔòÏÔÊ¾µ±Ìì
+		// å¦‚æœè¾“å…¥æ¡†æœ‰æ—¥æœŸï¼Œæ˜¾ç¤ºè¾“å…¥æ¡†çš„æ—¥æœŸï¼›å¦åˆ™æ˜¾ç¤ºå½“å¤©
 		if (!text->empty()) {
 			int y, m, d;
 			if (sscanf(text->c_str(), "%d/%d/%d", &y, &m, &d) == 3) {
@@ -990,7 +991,7 @@ void DrawDateInput(const char* label, std::string* text, int* year, int* month, 
 		}
 		else
 		{
-			// Ìø×ªµ½µ±Ìì
+			// è·³è½¬åˆ°å½“å¤©
 			time_t now = time(nullptr);
 			struct tm* t = localtime(&now);
 			g_dispYear = t->tm_year + 1900;
@@ -1011,11 +1012,11 @@ void CustomUI::CalenderIconInputText(const char* label, ImTextureID icon, std::s
 // 	static int startY = 0, startM = 0, startD = 0;
 // 	static int endY = 0, endM = 0, endD = 0;
 
-// 	ImGui::Text(u8"ÆğÊ¼ÈÕÆÚ:");
+// 	ImGui::Text(u8"èµ·å§‹æ—¥æœŸ:");
 // 	ImGui::SameLine(80);
 // 	DrawDateInput("##start", &startY, &startM, &startD, 0);
 // 
-// 	ImGui::Text(u8"½áÊøÈÕÆÚ:");
+// 	ImGui::Text(u8"ç»“æŸæ—¥æœŸ:");
 // 	ImGui::SameLine(80);
 // 	DrawDateInput("##end", &endY, &endM, &endD, 1);
 	if (nullptr == text)
@@ -1038,15 +1039,15 @@ bool CustomUI::CalenderIconInputText(const char* label, ImTextureID icon, int& y
 	snprintf(date_buf, sizeof(date_buf), "%d/%02d/%02d", year, month, day);
 	ImVec2 pos = ImGui::GetCursorScreenPos();
 
-	// ¼ÆËãÎÄ±¾¸÷²¿·ÖµÄÎ»ÖÃ
+	// è®¡ç®—æ–‡æœ¬å„éƒ¨åˆ†çš„ä½ç½®
 	ImVec2 full_size = ImGui::CalcTextSize(date_buf);
 
-			// »æÖÆÈÕÆÚÎÄ±¾
+			// ç»˜åˆ¶æ—¥æœŸæ–‡æœ¬
 	ImVec2 cursor_pos = ImGui::GetCursorScreenPos();
 	ImDrawList* dl = ImGui::GetWindowDrawList();
 
 	ImGuiStyle& style = ImGui::GetStyle();
-	// ±³¾°
+	// èƒŒæ™¯
 	ImU32 bg_color = ImGui::GetColorU32(style.Colors[ImGuiCol_WindowBg]);
 	ImU32 border_color = ImGui::GetColorU32(style.Colors[ImGuiCol_Border]);
 	float height = ImGui::GetFrameHeight();
@@ -1057,7 +1058,7 @@ bool CustomUI::CalenderIconInputText(const char* label, ImTextureID icon, int& y
 // 	dl->AddRectFilled(cursor_pos, ImVec2(cursor_pos.x + width, cursor_pos.y + height), bg_color);
 // 	dl->AddRect(cursor_pos, ImVec2(cursor_pos.x + width, cursor_pos.y + height), border_color);
 
-	// ¼ÆËã¸÷²¿·ÖÎÄ±¾Î»ÖÃ
+	// è®¡ç®—å„éƒ¨åˆ†æ–‡æœ¬ä½ç½®
 	char year_buf[8] = {""}, month_buf[8] = { "" }, day_buf[8] = { "" };
 	if (year > 0)
 	{
@@ -1080,7 +1081,7 @@ bool CustomUI::CalenderIconInputText(const char* label, ImTextureID icon, int& y
 	float text_y = pos.y + (height - ImGui::GetTextLineHeight()) * 0.5f;
 
 	float x = pos.x + 8;
-	// ¸÷ÇøÓòµÄ X ·¶Î§
+	// å„åŒºåŸŸçš„ X èŒƒå›´
 	float year_start_x = x;
 	float year_end_x = x + year_size.x;
 	float slash1_end = year_end_x + slash_size.x;
@@ -1090,35 +1091,35 @@ bool CustomUI::CalenderIconInputText(const char* label, ImTextureID icon, int& y
 	float day_start_x = slash2_end;
 	float day_end_x = day_start_x + day_size.x;
 
-	// ¼ì²âÊó±êÎ»ÖÃ
+	// æ£€æµ‹é¼ æ ‡ä½ç½®
 	ImVec2 mouse = ImGui::GetIO().MousePos;
 
 	bool isHovered = (mouse.x >= pos.x && mouse.x <= pos.x + width &&
 		mouse.y >= pos.y && mouse.y <= pos.y + height);
 
-	// ±³¾°É«
+	// èƒŒæ™¯è‰²
 	ImU32 bgColor = IM_COL32(30, 30, 35, 255);
 	dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), bg_color);
 
-	// ±ß¿òÑÕÉ«£¨hover Ê±ÏÔÊ¾ÇàÂÌÉ«£©
+	// è¾¹æ¡†é¢œè‰²ï¼ˆhover æ—¶æ˜¾ç¤ºé’ç»¿è‰²ï¼‰
 	ImU32 borderColor = isHovered ?
-		IM_COL32(100, 200, 200, 255) :  // ÇàÂÌÉ« #64C8C8
-		border_color;     // Ä¬ÈÏ»ÒÉ« #505064
-	float borderWidth = isHovered ? 1.5f : 1.0f;  // hover Ê±±ß¿òÉÔ´Ö
+		IM_COL32(100, 200, 200, 255) :  // é’ç»¿è‰² #64C8C8
+		border_color;     // é»˜è®¤ç°è‰² #505064
+	float borderWidth = isHovered ? 1.5f : 1.0f;  // hover æ—¶è¾¹æ¡†ç¨ç²—
 
 	dl->AddRect(pos, ImVec2(pos.x + width, pos.y + height),
 		borderColor);//, 4.0f, 0, borderWidth
 
-	//  ÅĞ¶ÏÊÇ·ñÒÑÑ¡ÔñÈÕÆÚ
+	//  åˆ¤æ–­æ˜¯å¦å·²é€‰æ‹©æ—¥æœŸ
 	bool hasDate = (year > 0 && month > 0 && day > 0);
 
 	if (!hasDate) {
-		// Î´Ñ¡ÔñÈÕÆÚ£ºÏÔÊ¾»ÒÉ«ÌáÊ¾ÎÄ×Ö
+		// æœªé€‰æ‹©æ—¥æœŸï¼šæ˜¾ç¤ºç°è‰²æç¤ºæ–‡å­—
 		TCHAR szTemp[128];
 // 		const char* hint = strHint.c_str();
 		ImVec2 hint_size = ImGui::CalcTextSize(selecdataTips.c_str());
-		// ¾ÓÖĞÏÔÊ¾
-		float hint_x = pos.x + (width - 30 - hint_size.x) * 0.5f;  // 30 ÊÇÍ¼±êÇøÓò¿í¶È
+		// å±…ä¸­æ˜¾ç¤º
+		float hint_x = pos.x + (width - 30 - hint_size.x) * 0.5f;  // 30 æ˜¯å›¾æ ‡åŒºåŸŸå®½åº¦
 		dl->AddText(ImVec2(pos.x + 8, text_y), IM_COL32(120, 120, 140, 255), selecdataTips.c_str());
 	}
 	else {
@@ -1129,35 +1130,35 @@ bool CustomUI::CalenderIconInputText(const char* label, ImTextureID icon, int& y
 		bool in_day = (mouse.x >= day_start_x && mouse.x <= day_end_x &&
 			mouse.y >= pos.y && mouse.y <= pos.y + height);
 
-		// »æÖÆÄê·İ
+		// ç»˜åˆ¶å¹´ä»½
 		ImU32 year_color = true ? IM_COL32(100, 180, 255, 255) :
 			(in_year ? IM_COL32(150, 200, 255, 255) : IM_COL32(200, 200, 220, 255));
 		dl->AddText(ImVec2(year_start_x, text_y), year_color, year_buf);
 
-		// »æÖÆĞ±¸Ü
+		// ç»˜åˆ¶æ–œæ 
 		dl->AddText(ImVec2(year_end_x, text_y), IM_COL32(120, 120, 140, 255), "/");
 
-		// »æÖÆÔÂ·İ
+		// ç»˜åˆ¶æœˆä»½
 		ImU32 month_color = true ? IM_COL32(100, 180, 255, 255) :
 			(in_month ? IM_COL32(150, 200, 255, 255) : IM_COL32(200, 200, 220, 255));
 		dl->AddText(ImVec2(month_start_x, text_y), month_color, month_buf);
 
-		// »æÖÆĞ±¸Ü
+		// ç»˜åˆ¶æ–œæ 
 		dl->AddText(ImVec2(month_end_x, text_y), IM_COL32(120, 120, 140, 255), "/");
 
-		// »æÖÆÈÕ
+		// ç»˜åˆ¶æ—¥
 		ImU32 day_color = true ? IM_COL32(100, 180, 255, 255) :
 			(in_day ? IM_COL32(150, 200, 255, 255) : IM_COL32(200, 200, 220, 255));
 		dl->AddText(ImVec2(day_start_x, text_y), day_color, day_buf);
 	}
 
-	// 		// ¼ì²âÄê·İÇøÓòĞüÍ£
+	// 		// æ£€æµ‹å¹´ä»½åŒºåŸŸæ‚¬åœ
 	ImVec2 mouse_pos = ImGui::GetIO().MousePos;
-			// »æÖÆÈÕÀúÍ¼±ê£¨ÓÒ²à£©
+			// ç»˜åˆ¶æ—¥å†å›¾æ ‡ï¼ˆå³ä¾§ï¼‰
 	ImVec2 icon_pos(cursor_pos.x + width - icon_size - icon_padding,
 		cursor_pos.y + (height - icon_size) * 0.5f);
 
-			//  ÈÕÀúÍ¼±ê£¨Ê¹ÓÃÍ¼Æ¬£©
+			//  æ—¥å†å›¾æ ‡ï¼ˆä½¿ç”¨å›¾ç‰‡ï¼‰
 	// 		float icon_size = 20.0f;
 	float icon_x = pos.x + width - icon_size - 6;
 	float icon_y = pos.y + (height - icon_size) * 0.5f;
@@ -1182,10 +1183,10 @@ bool CustomUI::CalenderIconInputText(const char* label, ImTextureID icon, int& y
 	}
 	ImGui::PopID();
 	i++;
-	// ÒşĞÎ°´Å¥ÓÃÓÚµã»÷¼ì²â
+	// éšå½¢æŒ‰é’®ç”¨äºç‚¹å‡»æ£€æµ‹
 	ImGui::InvisibleButton(label, ImVec2(width, height));
 
-	// ¼ì²âÈÕÀúÍ¼±êÇøÓòµã»÷
+	// æ£€æµ‹æ—¥å†å›¾æ ‡åŒºåŸŸç‚¹å‡»
 	bool icon_hovered = (mouse_pos.x >= icon_pos.x && mouse_pos.x <= icon_pos.x + icon_size &&
 		mouse_pos.y >= icon_pos.y && mouse_pos.y <= icon_pos.y + icon_size);
 	if (ImGui::IsItemClicked() && icon_hovered) {
@@ -1198,7 +1199,7 @@ bool CustomUI::CalenderIconInputText(const char* label, ImTextureID icon, int& y
 
 		pos = ImGui::GetCursorScreenPos();
 
-		// ¹Ø¼ü£ºÄÚ±ß¾à 16px
+		// å…³é”®ï¼šå†…è¾¹è· 16px
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kPadding, 4));
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.22f, 0.22f, 0.27f, 1.0f));
@@ -1214,13 +1215,13 @@ bool CustomUI::CalenderIconInputText(const char* label, ImTextureID icon, int& y
 	return show_popup;
 }
 
-// »æÖÆ·Å´ó¾µÍ¼±ê
+// ç»˜åˆ¶æ”¾å¤§é•œå›¾æ ‡
 void DrawIconSearch(ImDrawList* dl, ImVec2 pos, float size, ImU32 color) {
 	ImVec2 center(pos.x + size * 0.5f, pos.y + size * 0.5f);
 	float radius = size * 0.4f;
 	float thickness = size * 0.12f;
 
-	// Ô²ĞÎ¾µÆ¬
+	// åœ†å½¢é•œç‰‡
 	dl->AddCircle(
 		ImVec2(center.x - size * 0.05f, center.y - size * 0.05f),
 		radius,
@@ -1229,7 +1230,7 @@ void DrawIconSearch(ImDrawList* dl, ImVec2 pos, float size, ImU32 color) {
 		thickness
 	);
 
-	// ÊÖ±ú£¨Ğ±Ïß£©
+	// æ‰‹æŸ„ï¼ˆæ–œçº¿ï¼‰
 	dl->AddLine(
 		ImVec2(center.x + size * 0.15f, center.y + size * 0.15f),
 		ImVec2(center.x + size * 0.4f, center.y + size * 0.4f),
@@ -1250,23 +1251,23 @@ void CustomUI::SearchIconInputText(const char* id, std::string* text, float widt
 	float input_offset = icon_size + icon_padding * 2;
 
 	ImGuiStyle& style = ImGui::GetStyle();
-	// »æÖÆ±³¾°
+	// ç»˜åˆ¶èƒŒæ™¯
 	ImU32 bg_color = ImGui::GetColorU32(style.Colors[ImGuiCol_WindowBg]); 
 	ImU32 border_color = ImGui::GetColorU32(style.Colors[ImGuiCol_Border]);
 	ImU32 icon_color = ImGui::GetColorU32(style.Colors[ImGuiCol_Text]);
 
-	// ÊäÈë¿ò¸ß¶È
+	// è¾“å…¥æ¡†é«˜åº¦
 	float height = ImGui::GetFrameHeight();
 
-	// »æÖÆ±³¾°ºÍ±ß¿ò
+	// ç»˜åˆ¶èƒŒæ™¯å’Œè¾¹æ¡†
 	dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), bg_color);//, 4.0f
 	dl->AddRect(pos, ImVec2(pos.x + width, pos.y + height), border_color);//, 4.0f, 0, 1.5f
 
-	// »æÖÆ·Å´ó¾µÍ¼±ê
+	// ç»˜åˆ¶æ”¾å¤§é•œå›¾æ ‡
 	ImVec2 icon_pos(pos.x + icon_padding, pos.y + (height - icon_size) * 0.5f);
 	DrawIconSearch(dl, icon_pos, icon_size, icon_color);
 
-	// »æÖÆÊäÈë¿ò£¨Æ«ÒÆÒÔ±Ü¿ªÍ¼±ê£©
+	// ç»˜åˆ¶è¾“å…¥æ¡†ï¼ˆåç§»ä»¥é¿å¼€å›¾æ ‡ï¼‰
 	ImGui::SetCursorScreenPos(ImVec2(pos.x + input_offset, pos.y));
 	ImGui::SetNextItemWidth(width - input_offset - 4);
 
@@ -1275,7 +1276,7 @@ void CustomUI::SearchIconInputText(const char* id, std::string* text, float widt
 	ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0, 0, 0, 0));
 	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
 
-	ImGui::InputTextWithHint(id, searchTips.c_str(), text);//u8"ÇëÊäÈë"
+	ImGui::InputTextWithHint(id, searchTips.c_str(), text);//u8"è¯·è¾“å…¥"
 
 	ImGui::PopStyleColor(4);
 }
@@ -1284,17 +1285,17 @@ void CustomUI::SearchIconInputText(const char* id, std::string* text, float widt
 
 bool CustomUI::ImageButtonNP(const char* id, ImTextureID icon, const ImVec2& size)
 {
-	// 1. Ïû³ıƒÈ¾àÅcß…¿ò£¬×Œ°´âo´óĞ¡ÅcˆDÆ¬ 1:1 ÎÇºÏ
+	// 1. æ¶ˆé™¤å…§è·èˆ‡é‚Šæ¡†ï¼Œè®“æŒ‰éˆ•å¤§å°èˆ‡åœ–ç‰‡ 1:1 å»åˆ
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 
-	// 2. È¡µÃ®”Ç°Ö÷î}µÄ Hovered Åc Active îÉ«£¬ƒHĞŞ¸ÄÆä Alpha Í¸Ã÷¶È
+	// 2. å–å¾—ç•¶å‰ä¸»é¡Œçš„ Hovered èˆ‡ Active é¡è‰²ï¼Œåƒ…ä¿®æ”¹å…¶ Alpha é€æ˜åº¦
 	ImVec4 colHovered = ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
 	ImVec4 colActive = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
-	colHovered.w = 0.25f; // Hover ±£Áô 25% ²»Í¸Ã÷¶È£¨¿ÉÒÀĞèÇóÕ{Õû£¬ÀıÈç 0.15f ~ 0.35f£©
-	colActive.w = 0.45f; // Active ±£Áô 45% ²»Í¸Ã÷¶È
+	colHovered.w = 0.25f; // Hover ä¿ç•™ 25% ä¸é€æ˜åº¦ï¼ˆå¯ä¾éœ€æ±‚èª¿æ•´ï¼Œä¾‹å¦‚ 0.15f ~ 0.35fï¼‰
+	colActive.w = 0.45f; // Active ä¿ç•™ 45% ä¸é€æ˜åº¦
 
-	// 3. îAÔOÍêÈ«Ÿo±³¾°£¬Hover / Active ï@Ê¾°ëÍ¸Ã÷Ö÷î}É«
+	// 3. é è¨­å®Œå…¨ç„¡èƒŒæ™¯ï¼ŒHover / Active é¡¯ç¤ºåŠé€æ˜ä¸»é¡Œè‰²
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colHovered);
 	ImGui::PushStyleColor(ImGuiCol_ButtonActive, colActive);
@@ -1328,7 +1329,7 @@ bool CustomUI::Combo( const char* label, std::string& sSel, const std::vector<st
 	std::vector<const char*> items;
 	items.reserve(vStr.size());
 
-	// 1. ÊÕ¼¯Ö¸˜ËK±ÈŒ¦ sSel ÊÇ·ñ´æÔÚì¶ vStr ÖĞ
+	// 1. æ”¶é›†æŒ‡æ¨™ä¸¦æ¯”å° sSel æ˜¯å¦å­˜åœ¨æ–¼ vStr ä¸­
 	for (size_t i = 0; i < vStr.size(); ++i)
 	{
 		items.push_back(vStr[i].c_str());
@@ -1338,13 +1339,13 @@ bool CustomUI::Combo( const char* label, std::string& sSel, const std::vector<st
 		}
 	}
 
-	// Èô‚÷ÈëµÄ sSel ²»ÔÚ vStr ÖĞ£¬´_±£Î´ßxÖĞ•r sSel é¿Õ
+	// è‹¥å‚³å…¥çš„ sSel ä¸åœ¨ vStr ä¸­ï¼Œç¢ºä¿æœªé¸ä¸­æ™‚ sSel ç‚ºç©º
 	if (current_item == -1 && !sSel.empty())
 	{
 		sSel.clear();
 	}
 
-	// 2. ºô½Ğµ×ŒÓ C ê‡ÁĞ°æ±¾ßMĞĞäÖÈ¾Åc»¥„Ó
+	// 2. å‘¼å«åº•å±¤ C é™£åˆ—ç‰ˆæœ¬é€²è¡Œæ¸²æŸ“èˆ‡äº’å‹•
 	bool value_changed = Combo(
 		label,
 		&current_item,
@@ -1355,7 +1356,7 @@ bool CustomUI::Combo( const char* label, std::string& sSel, const std::vector<st
 		icon_size
 	);
 
-	// 3. ÈôÓÃ‘ôücßxÁËĞÂí—Ä¿£¬Œ¢ßxÖĞ×Ö´®Œ‘»Ø sSel
+	// 3. è‹¥ç”¨æˆ¶é»é¸äº†æ–°é …ç›®ï¼Œå°‡é¸ä¸­å­—ä¸²å¯«å› sSel
 	if (value_changed && current_item >= 0 && current_item < static_cast<int>(vStr.size()))
 	{
 		sSel = vStr[current_item];
@@ -1374,7 +1375,7 @@ bool CustomUI::Combo2( const char* label, std::string& sSel, const std::vector<s
 	ImGui::BeginGroup();
 	ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset = 0.0f;
 
-	// 1. ¼ÇÂ¼µÚÒ»ĞĞÎÄ±¾µÄÆğÊ¼ Y ×ø±ê
+	// 1. è®°å½•ç¬¬ä¸€è¡Œæ–‡æœ¬çš„èµ·å§‹ Y åæ ‡
 	float first_line_y = ImGui::GetCursorScreenPos().y;
 	float label_right_x = ImGui::GetCursorScreenPos().x;
 
@@ -1382,19 +1383,19 @@ bool CustomUI::Combo2( const char* label, std::string& sSel, const std::vector<s
 	if (label != label_end)
 	{
 		ImGui::TextUnformatted(label, label_end);
-		label_right_x = ImGui::GetItemRectMax().x; // ¼ÇÂ¼×ó²à±êÌâ½áÊøÎ»ÖÃ£¬·ÀÖ¹ÓÒ²àÎÄ×Ö¹ı³¤Ê±ÖØµş
+		label_right_x = ImGui::GetItemRectMax().x; // è®°å½•å·¦ä¾§æ ‡é¢˜ç»“æŸä½ç½®ï¼Œé˜²æ­¢å³ä¾§æ–‡å­—è¿‡é•¿æ—¶é‡å 
 	}
 	else
 	{
-		// ¼´Ê¹Ã»ÓĞ×ó²à±êÌâ£¬Ò²±£ÁôÒ»ĞĞ¸ß¶ÈÕ¼Î»£¬±£Ö¤Á½ĞĞ½á¹¹¶ÔÆë
+		// å³ä½¿æ²¡æœ‰å·¦ä¾§æ ‡é¢˜ï¼Œä¹Ÿä¿ç•™ä¸€è¡Œé«˜åº¦å ä½ï¼Œä¿è¯ä¸¤è¡Œç»“æ„å¯¹é½
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight()));
 	}
 
-	// 2. µÚ¶şĞĞ£ºCombo
+	// 2. ç¬¬äºŒè¡Œï¼šCombo
 	ImGui::SetNextItemWidth(item_w);
 	bool value_changed = Combo("##combo", sSel, vStr, popup_max_height_in_items, arrow_icon, icon_size);
 
-	// ²¶»ñµÚ¶şĞĞ Combo ±¾ÌåµÄ¾ØĞÎ±ß½ç
+	// æ•è·ç¬¬äºŒè¡Œ Combo æœ¬ä½“çš„çŸ©å½¢è¾¹ç•Œ
 	ImVec2 ctrl_min = ImGui::GetItemRectMin();
 	ImVec2 ctrl_max = ImGui::GetItemRectMax();
 
@@ -1411,7 +1412,7 @@ bool CustomUI::Combo2( const char* label, std::string& sSel, const std::vector<s
 
 	s_LastItem.ctrl_min = ctrl_min;
 	s_LastItem.ctrl_max = ctrl_max;
-	// Combo ÓÒ²àÓĞ 4px ÓÒ±ß¾à + icon_size.x µÄÍ¼±ê£¬Òò´ËÈÃ³öÕâ¶Î¿í¶È
+	// Combo å³ä¾§æœ‰ 4px å³è¾¹è· + icon_size.x çš„å›¾æ ‡ï¼Œå› æ­¤è®©å‡ºè¿™æ®µå®½åº¦
 	s_LastItem.right_reserve_w = icon_size.x + 4.0f;
 	s_LastItem.valid = true;
 
@@ -1425,16 +1426,16 @@ void CustomUI::AppendText(const std::string& text, ImU32 color)
 
 	ImVec2 text_size = ImGui::CalcTextSize(text.c_str(), text.c_str() + text.size());
 
-	// ¼ÆËãÓÒ¶ÔÆëÆğÊ¼ X£º½ôÌù Combo2 µÄÓÒ±ßÔµ (max_x)
+	// è®¡ç®—å³å¯¹é½èµ·å§‹ Xï¼šç´§è´´ Combo2 çš„å³è¾¹ç¼˜ (max_x)
 	float pos_x = s_LastItem.max_x - text_size.x;
 	float pos_y = s_LastItem.text_y;
 
-	// ·ÀÖØµş±£»¤£ºÈç¹ûÓÒ²àÎÄ×ÖÌ«³¤£¬ÏŞÖÆÆä×î×ó²»³¬¹ı×ó²à label ÓÒ²à + 6px£¬²¢×Ô¶¯²Ã¼ô
+	// é˜²é‡å ä¿æŠ¤ï¼šå¦‚æœå³ä¾§æ–‡å­—å¤ªé•¿ï¼Œé™åˆ¶å…¶æœ€å·¦ä¸è¶…è¿‡å·¦ä¾§ label å³ä¾§ + 6pxï¼Œå¹¶è‡ªåŠ¨è£å‰ª
 	float min_allowed_x = s_LastItem.label_end_x + 6.0f;
 	if (pos_x < min_allowed_x)
 		pos_x = min_allowed_x;
 
-	ImU32 draw_col = (color != 0) ? color : ImGui::GetColorU32(ImGuiCol_Text); // Ä¬ÈÏÊ¹ÓÃÈ«¾ÖÎÄ±¾É«
+	ImU32 draw_col = (color != 0) ? color : ImGui::GetColorU32(ImGuiCol_Text); // é»˜è®¤ä½¿ç”¨å…¨å±€æ–‡æœ¬è‰²
 	ImVec4 clip_rect(min_allowed_x, pos_y, s_LastItem.max_x, pos_y + text_size.y + 2.0f);
 
 	ImGui::GetWindowDrawList()->AddText(
@@ -1457,13 +1458,13 @@ void CustomUI::AppendText2(const std::string& text, ImU32 color)
 	const float margin = 4.0f;
 	ImVec2 text_size = ImGui::CalcTextSize(text.c_str(), text.c_str() + text.size());
 
-	// ¼ÆËãµ¥Î»ÎÄ±¾µÄÓÒ±ßÔµ£º¿Ø¼şÓÒ±ß½ç - ÈÃ³öµÄ°´Å¥¿í¶È - 4px ¼ä¾à
+	// è®¡ç®—å•ä½æ–‡æœ¬çš„å³è¾¹ç¼˜ï¼šæ§ä»¶å³è¾¹ç•Œ - è®©å‡ºçš„æŒ‰é’®å®½åº¦ - 4px é—´è·
 	float right_edge = s_LastItem.ctrl_max.x - s_LastItem.right_reserve_w - margin;
 	float pos_x = right_edge - text_size.x;
-	// ´¹Ö±¾ÓÖĞ¶ÔÆëµÚ¶şĞĞ¿Ø¼şÖĞĞÄ
+	// å‚ç›´å±…ä¸­å¯¹é½ç¬¬äºŒè¡Œæ§ä»¶ä¸­å¿ƒ
 	float pos_y = std::floor((s_LastItem.ctrl_min.y + s_LastItem.ctrl_max.y - text_size.y) * 0.5f);
 
-	// ·ÀÖ¹¹ı³¤Ô½³ö¿Ø¼ş×ó±ß½ç£¬ÉèÖÃ²Ã¼ô¾ØĞÎ
+	// é˜²æ­¢è¿‡é•¿è¶Šå‡ºæ§ä»¶å·¦è¾¹ç•Œï¼Œè®¾ç½®è£å‰ªçŸ©å½¢
 	float min_allowed_x = s_LastItem.ctrl_min.x + margin;
 	if (pos_x < min_allowed_x)
 		pos_x = min_allowed_x;
@@ -1525,7 +1526,7 @@ bool CustomUI::Combo(
 	ImVec2 rect_max = ImGui::GetItemRectMax();
 	ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
-	// ´¹Ö±¾ÓÖĞ»æÖÆÔ¤ÀÀÎÄ×Ö
+	// å‚ç›´å±…ä¸­ç»˜åˆ¶é¢„è§ˆæ–‡å­—
 	if (preview_value && preview_value[0] != '\0')
 	{
 		ImVec2 text_size = ImGui::CalcTextSize(preview_value);
@@ -1537,7 +1538,7 @@ bool CustomUI::Combo(
 			ImGui::GetColorU32(ImGuiCol_Text), preview_value, nullptr, 0.0f, &clip_rect);
 	}
 
-	// ¸´ÓÃ¸¨Öúº¯Êı»æÖÆÓÒ²à¼ıÍ·
+	// å¤ç”¨è¾…åŠ©å‡½æ•°ç»˜åˆ¶å³ä¾§ç®­å¤´
 	DrawComboArrow(draw_list, rect_min, rect_max, arrow_icon, icon_size,
 		is_open, ImGui::IsItemHovered(), ImGui::IsItemActive());
 
@@ -1547,7 +1548,7 @@ bool CustomUI::Combo(
 }
 
 
-// ¹© ImGui::InputText „Ó‘BÕ{Õû std::string ÈİÁ¿µÄƒÈ²¿»Øºôº¯Ê½
+// ä¾› ImGui::InputText å‹•æ…‹èª¿æ•´ std::string å®¹é‡çš„å…§éƒ¨å›å‘¼å‡½å¼
 static int StdStringResizeCallback(ImGuiInputTextCallbackData* data)
 {
 	if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
@@ -1618,11 +1619,11 @@ bool CustomUI::EditableCombo(
 		ImGui::GetColorU32(arrow_hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg));
 	draw_list->AddRect(full_min, full_max, ImGui::GetColorU32(ImGuiCol_Border));
 
-	// ¸´ÓÃ¸¨Öúº¯Êı»æÖÆÓÒ²à¼ıÍ·
+	// å¤ç”¨è¾…åŠ©å‡½æ•°ç»˜åˆ¶å³ä¾§ç®­å¤´
 	DrawComboArrow(draw_list, full_min, full_max, arrow_icon, icon_size,
 		is_open, arrow_hovered, arrow_active);
 
-	// ×¼±¸Ö¸ÕëÊı×éÒÔ¸´ÓÃ RenderComboItems
+	// å‡†å¤‡æŒ‡é’ˆæ•°ç»„ä»¥å¤ç”¨ RenderComboItems
 	std::vector<const char*> items;
 	items.reserve(vStr.size());
 	for (const auto& s : vStr) items.push_back(s.c_str());
@@ -1672,7 +1673,7 @@ static int InputText2_Callback(ImGuiInputTextCallbackData* data)
 	InputText2_UserData* user_data = static_cast<InputText2_UserData*>(data->UserData);
 	if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
 	{
-		// „Ó‘BÕ{Õû std::string ´óĞ¡K¸üĞÂ¾Ğn…^Ö¸˜Ë
+		// å‹•æ…‹èª¿æ•´ std::string å¤§å°ä¸¦æ›´æ–°ç·©è¡å€æŒ‡æ¨™
 		std::string* str = user_data->Str;
 		IM_ASSERT(data->Buf == str->c_str());
 		str->resize(data->BufTextLen);
@@ -1680,7 +1681,7 @@ static int InputText2_Callback(ImGuiInputTextCallbackData* data)
 	}
 	else if (user_data->ChainCallback)
 	{
-		// ŞD°l½oÍâ²¿‚÷ÈëµÄ×ÔÓ†»Øºôº¯Ê½
+		// è½‰ç™¼çµ¦å¤–éƒ¨å‚³å…¥çš„è‡ªè¨‚å›å‘¼å‡½å¼
 		data->UserData = user_data->ChainCallbackUserData;
 		return user_data->ChainCallback(data);
 	}
@@ -1692,14 +1693,14 @@ bool CustomUI::InputText2( const char* label, std::string* str,
 {
 	IM_ASSERT(str != nullptr);
 
-	// 1. ²¶«@Íâ²¿Í¨ß^ ImGui::SetNextItemWidth() ÔO¶¨µÄŒ’¶È
+	// 1. æ•ç²å¤–éƒ¨é€šé ImGui::SetNextItemWidth() è¨­å®šçš„å¯¬åº¦
 	float item_w = ImGui::CalcItemWidth();
 
 	ImGui::PushID(label);
 	ImGui::BeginGroup();
 	ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset = 0.0f;
 
-	// 2. µÚÒ»ĞĞ£ºï@Ê¾ label ÖĞ "##" ×óß…µÄ¿ÉÒŠÎÄ±¾£¬KÓ›ä›×ù˜Ë½o AppendText Ê¹ÓÃ
+	// 2. ç¬¬ä¸€è¡Œï¼šé¡¯ç¤º label ä¸­ "##" å·¦é‚Šçš„å¯è¦‹æ–‡æœ¬ï¼Œä¸¦è¨˜éŒ„åº§æ¨™çµ¦ AppendText ä½¿ç”¨
 	float first_line_y = ImGui::GetCursorScreenPos().y;
 	float label_right_x = ImGui::GetCursorScreenPos().x;
 
@@ -1714,7 +1715,7 @@ bool CustomUI::InputText2( const char* label, std::string* str,
 		ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight()));
 	}
 
-	// 3. µÚ¶şĞĞ£ºÌ×ÓÃŒ’¶ÈKºô½ĞÖ§Ô®„Ó‘B”UÈİµÄ InputText
+	// 3. ç¬¬äºŒè¡Œï¼šå¥—ç”¨å¯¬åº¦ä¸¦å‘¼å«æ”¯æ´å‹•æ…‹æ“´å®¹çš„ InputText
 	ImGui::SetNextItemWidth(item_w);
 
 	flags |= ImGuiInputTextFlags_CallbackResize;
@@ -1732,10 +1733,10 @@ bool CustomUI::InputText2( const char* label, std::string* str,
 		&cb_user_data
 	);
 
-	// ²¶«@¾İ‹Íê³ÉÊÂ¼ş£¨°üº¬°´ÏÂ Enter ´_ÕJ£¬»òĞŞ¸ÄƒÈÈİááüc“ôÍâ²¿Ê§È¥½¹üc£©
+	// æ•ç²ç·¨è¼¯å®Œæˆäº‹ä»¶ï¼ˆåŒ…å«æŒ‰ä¸‹ Enter ç¢ºèªï¼Œæˆ–ä¿®æ”¹å…§å®¹å¾Œé»æ“Šå¤–éƒ¨å¤±å»ç„¦é»ï¼‰
 	bool edit_finished = ImGui::IsItemDeactivatedAfterEdit();
 
-	// ²¶»ñµÚ¶şĞĞ InputText ±¾ÌåµÄ¾ØĞÎ±ß½ç
+	// æ•è·ç¬¬äºŒè¡Œ InputText æœ¬ä½“çš„çŸ©å½¢è¾¹ç•Œ
 	ImVec2 ctrl_min = ImGui::GetItemRectMin();
 	ImVec2 ctrl_max = ImGui::GetItemRectMax();
 
@@ -1752,10 +1753,144 @@ bool CustomUI::InputText2( const char* label, std::string* str,
 
 	s_LastItem.ctrl_min = ctrl_min;
 	s_LastItem.ctrl_max = ctrl_max;
-	s_LastItem.right_reserve_w = 0.0f; // InputText Ã»ÓĞÓÒ²àÏÂÀ­°´Å¥£¬ÎŞĞè¶îÍâÈÃÎ»
+	s_LastItem.right_reserve_w = 0.0f; // InputText æ²¡æœ‰å³ä¾§ä¸‹æ‹‰æŒ‰é’®ï¼Œæ— éœ€é¢å¤–è®©ä½
 	s_LastItem.valid = true;
 
 	return edit_finished;
+}
+
+
+namespace CustomTab
+{
+	struct TabBarState
+	{
+		ImGuiID activeTabId = 0;        // ç•¶å‰é¸ä¸­çš„åˆ†é  ID
+		bool    hasSelectionThisFrame = false;
+		int     itemIndex = 0;          // ç•¶å‰æ¸²æŸ“åˆ°ç¬¬å¹¾å€‹åˆ†é 
+		ImVec2  barMin = ImVec2(0, 0);
+		ImVec2  barMax = ImVec2(0, 0);
+	};
+
+	static std::unordered_map<ImGuiID, TabBarState> s_tabBars;
+	static TabBarState* s_currentTabBar = nullptr;
+	static ImGuiID      s_currentTabBarId = 0;
+
+	bool BeginTabBar(const char* str_id, ImGuiTabBarFlags flags, bool bLine)
+	{
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		if (window->SkipItems)
+			return false;
+
+		ImGuiID id = window->GetID(str_id);
+		ImGui::PushID(id);
+
+		TabBarState& state = s_tabBars[id];
+		state.itemIndex = 0;
+		state.hasSelectionThisFrame = false;
+		state.barMin = ImGui::GetCursorScreenPos();
+		state.barMax = state.barMin;
+
+		s_currentTabBar = &state;
+		s_currentTabBarId = id;
+
+		if (bLine)
+		{
+			// ğŸŸ¢ 1. æ ¹æ“šç•¶å‰å­—é«”é«˜åº¦èˆ‡ FramePadding ç²¾æº–ç®—å‡ºåˆ†é æŒ‰éˆ•çš„åº•é‚Š Y åº§æ¨™
+			//    (èˆ‡ IconTextToggleButton åœ¨ btnSize.y == 0 æ™‚çš„è¨ˆç®—å…¬å¼å®Œå…¨ä¸€è‡´ï¼šlabelSize.y + padY * 2)
+			float tabHeight = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
+			float lineY = state.barMin.y + tabHeight;
+
+			float startX = ImGui::GetWindowPos().x + ImGui::GetStyle().WindowPadding.x;
+			float endX = ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
+
+			// ğŸŸ¢ 2. ç›´æ¥åœ¨ BeginTabBar ä¸­å…ˆç•«å‡ºåº•ç·šï¼ˆå¾ŒçºŒ BeginTabItem ç•«çš„æŒ‰éˆ•æœƒè‡ªç„¶ç–Šåœ¨åº•ç·šä¸Šæ–¹ï¼ï¼‰
+			ImGui::GetWindowDrawList()->AddLine(
+				ImVec2(startX, lineY),
+				ImVec2(endX, lineY),
+				ImGui::GetColorU32(ImGuiCol_TabActive), // æˆ– ImGuiCol_Border
+				1.0f
+			);
+		}
+
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, ImGui::GetStyle().ItemSpacing.y));
+		return true;
+	}
+
+	void EndTabBar()
+	{
+		if (!s_currentTabBar)
+			return;
+
+		ImGui::PopStyleVar(); // é‚„åŸ ItemSpacing
+		s_currentTabBar = nullptr;
+		s_currentTabBarId = 0;
+		ImGui::PopID();
+	}
+	bool BeginTabItem(const char* label, bool* p_open, ImGuiTabItemFlags flags,
+		ImTextureID icon, const ImVec2& iconSize)
+	{
+		if (!s_currentTabBar)
+			return false;
+
+		ImGuiWindow* window = ImGui::GetCurrentWindow();
+		if (window->SkipItems)
+			return false;
+
+		if (s_currentTabBar->itemIndex > 0)
+		{
+			ImGui::SameLine();
+		}
+
+		ImGuiID tabId = window->GetID(label);
+
+		// é¦–æ¬¡å»ºç«‹ TabBar æ™‚ï¼Œé è¨­é¸ä¸­ç¬¬ 0 å€‹åˆ†é ï¼›æˆ–è€…å¤–éƒ¨å¼·åˆ¶å‚³å…¥ SetSelected
+		if (s_currentTabBar->activeTabId == 0 && s_currentTabBar->itemIndex == 0)
+		{
+			s_currentTabBar->activeTabId = tabId;
+		}
+		if (flags & ImGuiTabItemFlags_SetSelected)
+		{
+			s_currentTabBar->activeTabId = tabId;
+		}
+
+		bool isSelected = (s_currentTabBar->activeTabId == tabId);
+		bool toggleState = isSelected;
+
+		// å‘¼å«æ‚¨çš„ CustomUI::IconTextToggleButton æ¸²æŸ“åˆ†é æŒ‰éˆ•ï¼
+		// btnSize è¨­ç‚º (0, 0) è®“å®ƒæ ¹æ“šæ–‡å­—èˆ‡åœ–ç¤ºè‡ªå‹•è¨ˆç®—æœ€åˆé©çš„å¯¬é«˜
+		bool pressed = CustomUI::IconTextToggleButton(
+			&toggleState,
+			label,
+			icon,
+			ImVec2(0.0f, 0.0f),
+			iconSize,
+			true
+		);
+
+		// è¨˜éŒ„æ•´å€‹ TabBar çš„åŒ…åœç›’ï¼ˆç”¨æ–¼ EndTabBar ç•«åº•ç·šï¼‰
+		ImVec2 itemMax = ImGui::GetItemRectMax();
+		if (itemMax.x > s_currentTabBar->barMax.x) s_currentTabBar->barMax.x = itemMax.x;
+		if (itemMax.y > s_currentTabBar->barMax.y) s_currentTabBar->barMax.y = itemMax.y;
+
+		if (pressed)
+		{
+			s_currentTabBar->activeTabId = tabId;
+			isSelected = true;
+		}
+
+		if (isSelected)
+		{
+			s_currentTabBar->hasSelectionThisFrame = true;
+		}
+
+		s_currentTabBar->itemIndex++;
+		return isSelected;
+	}
+
+	void EndTabItem()
+	{
+		// ä¿æŒèˆ‡ ImGui::EndTabItem() ç›¸åŒçš„å°ç¨±çµæ§‹ï¼ˆç„¡éœ€é¡å¤–æ“ä½œï¼‰
+	}
 }
 
 #endif

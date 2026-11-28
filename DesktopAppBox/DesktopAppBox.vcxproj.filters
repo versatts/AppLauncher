@@ -17,7 +17,6 @@
     <ClInclude Include="FolderUIData.h" />
     <ClInclude Include="Application.h" />
     <ClInclude Include="AppConfig.h" />
-    <ClInclude Include="SettingUI.h" />
     <ClInclude Include="..\ImGuiCustom\ImGuiObj.h">
       <Filter>ImGuiCustom</Filter>
     </ClInclude>
@@ -39,7 +38,6 @@
     <ClCompile Include="FolderUIData.cpp" />
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="AppConfig.cpp" />
-    <ClCompile Include="SettingUI.cpp" />
     <ClCompile Include="..\ImGuiCustom\ImGuiObj.cpp">
       <Filter>ImGuiCustom</Filter>
     </ClCompile>

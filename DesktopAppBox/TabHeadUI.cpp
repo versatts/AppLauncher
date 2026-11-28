@@ -9,87 +9,40 @@ extern FolderUIData gFUD;
 void TabHeadUI::Render()
 {
     auto& arrTab = gFUD.m_vTabName;
-    if (arrTab.size() == 0 || (m_Idx < 0 && m_Idx >= arrTab.size()))
-    {
+    if (arrTab.empty() || m_Idx < 0 || m_Idx >= (int)arrTab.size())
         return;
-    }
 
-    char tabBarId[64];
-    sprintf_s(tabBarId, "AppBox_Category_Tabs##v%d", m_tabBarVersion);
-
-    if (ImGui::BeginTabBar(tabBarId, ImGuiTabBarFlags_None))
+    // 甚至不再需要 m_tabBarVersion 強制重建，也不再需要 s_tabHoveredCache！
+    if (CustomTab::BeginTabBar("AppBox_Category_Tabs"))
     {
-        // 🟢 🎯 核心修正 1：建立一個簡單安全的靜態 Hover 快取陣列（支援多達 64 個分頁）
-        // 用來記憶每一頁上一幀的滑鼠懸停狀態
-        static bool s_tabHoveredCache[64] = { false };
-
         int i = 0;
-        for (auto a : arrTab)
+        for (const auto& a : arrTab)
         {
             std::wstring displayName = (i == 0) ? a : StripOrderPrefix(a);
 
-            std::string tabNameUtf8;
-            int size_needed = WideCharToMultiByte(CP_UTF8, 0, displayName.c_str(), -1, NULL, 0, NULL, NULL);
-            if (size_needed > 0) {
-                tabNameUtf8.resize(size_needed - 1);
-                WideCharToMultiByte(CP_UTF8, 0, displayName.c_str(), -1, &tabNameUtf8[0], size_needed, NULL, NULL);
-            }
+            std::string tabNameUtf8 = ToU8(displayName.c_str());
 
-            // 🟢 🎯 核心修正 2：讀取選中狀態與上一幀快取的 Hover 狀態
-            bool isCurrentActive = (m_Idx == i);
-            bool isHoveredLastFrame = (i < 64) ? s_tabHoveredCache[i] : false;
+            // 確保外部修改 m_Idx（例如重排資料夾後）時同步選中狀態
+            ImGuiTabItemFlags flags = (m_Idx == i) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
 
-            // 🎯 如果是當前選中分頁，或者滑鼠「上一幀正在懸停」，則顯示 100% 完整亮度
-            if (isCurrentActive || isHoveredLastFrame)
+            // 無縫替換！如果最後一個是「設定」分頁，還可以順便傳入設定圖示！
+            bool selected = CustomTab::BeginTabItem(tabNameUtf8.c_str(), nullptr, flags);
+
+            if (selected && m_Idx != i)
             {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_Text));
-            }
-            else
-            {
-                // 只有既非當前頁、滑鼠又沒懸停時，標籤文字才單獨變暗
-                ImVec4 dimmedColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-                dimmedColor.w = 0.7f;
-                ImGui::PushStyleColor(ImGuiCol_Text, dimmedColor);
+                m_Idx = i;
             }
 
-            const bool restoring = (m_restoreCountdown > 0);
-
-            //ImGui::SetNextItemWidth(80);
-           
-            bool selected = ImGui::BeginTabItem(tabNameUtf8.c_str(), nullptr,
-                (restoring && i == m_Idx) ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None);//这句是什么意思?
-
-            // 執行完 BeginTabItem 立即釋放文字顏色，防禦內建元件被誤傷
-            ImGui::PopStyleColor();
-
-            // 🟢 🎯 核心修正 3：在標籤按鈕剛渲染完的這一瞬間，
-            // 透過標準的 ImGui::IsItemHovered() 精準抓取當前幀的懸停狀態，並寫入快取供下一幀變色使用！
-            if (i < 64)
-            {
-                s_tabHoveredCache[i] = ImGui::IsItemHovered();
-            }
-
-            if (selected)
-            {
-                if (restoring)
-                {
-                    if (i == m_Idx) m_restoreCountdown = 0;
-                }
-                else if (m_Idx != i)
-                {
-                    m_Idx = i;
-                }
-            }
-
-            if (i > 0 && i < gFUD.gvFolder.size() && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+            // 原拖曳排序程式碼 100% 保留，無需任何修改！
+            if (i > 0 && i < (int)gFUD.gvFolder.size() && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
             {
                 ImGui::SetDragDropPayload("TAB_ORDER", &i, sizeof(int));
                 ImGui::TextUnformatted(tabNameUtf8.c_str());
                 ImGui::EndDragDropSource();
             }
-            if (i > 0 && i < gFUD.gvFolder.size() && ImGui::BeginDragDropTarget())
+            if (i > 0 && i < (int)gFUD.gvFolder.size() && ImGui::BeginDragDropTarget())
             {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("TAB_ORDER"))
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("TAB_ORDER", ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
                 {
                     int from = *(const int*)payload->Data;
                     if (from > 0 && from != i)
@@ -103,56 +56,11 @@ void TabHeadUI::Render()
 
             if (selected)
             {
-                ImGui::EndTabItem();
+                CustomTab::EndTabItem();
             }
             i++;
         }
 
-        ImGui::EndTabBar();
-    }
-#if 0
-    // btn set
-    ImVec2 tabBarSize = ImGui::GetItemRectSize();
-
-    float windowPaddingX = ImGui::GetStyle().WindowPadding.x;
-    float buttonWidth = 80.0f; // 這裡可以自訂你的按鈕寬度
-    //float buttonWidth = 16 + ImGui::GetStyle().FramePadding.x * 2;
-    ImVec2 btnSize(buttonWidth, tabBarSize.y - 2.0f);
-    float targetPosX = ImGui::GetWindowWidth() - windowPaddingX - btnSize.x;
-    ImGui::SameLine();
-    ImGui::SetCursorPosX(targetPosX);
-
-    static bool openSetModal = false; 
-    //if (ImGui::Button("Set", ImVec2(buttonWidth, tabBarSize.y - 3.0f)))
-    if (CustomUI::IconTextButton("Set", gFUD.m_texSet, btnSize, ImVec2(16, 16)))
-    //if (ImGui::ImageButton("Set", gFUD.m_texSet, ImVec2(16, 16)))
-    {
-        openSetModal = true;
-    }
-#endif
-#if 0
-    btnSize.y = 30;
-    static bool bSel = false;
-    static bool bEnabled = true;
-    if (CustomUI::IconTextToggleButton(&bSel, "Toggle", gFUD.m_texSet, btnSize, ImVec2(16, 16)))
-    {
-        if (bSel)
-        {
-        //    openSetModal = true;
-        }
-        bEnabled = bSel;
-    }
-    ImGui::SameLine();
-    if (CustomUI::IconTextToggleButton(&bSel, "Disabled", gFUD.m_texSet, btnSize, ImVec2(16, 16), bEnabled))
-    {
-
-    }
-#endif 
-
- //   SettingUI::Render(openSetModal);
-
-    if (m_restoreCountdown > 0)
-    {
-        m_restoreCountdown--;
+        CustomTab::EndTabBar();
     }
 }

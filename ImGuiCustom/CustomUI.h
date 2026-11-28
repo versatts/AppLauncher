@@ -81,5 +81,21 @@ public:
 
 };
 
+namespace CustomTab
+{
+	// 開始一個自訂分頁列（可選傳入圖示、按鈕高度等外觀參數）
+	bool BeginTabBar(const char* str_id, ImGuiTabBarFlags flags = ImGuiTabBarFlags_None, bool bLine = true);
+
+	// 渲染單個自訂分頁按鈕（內部封裝 CustomUI::IconTextToggleButton）
+	// 支援傳入可選圖示 icon 與 iconSize，若不傳則為純文字分頁按鈕，與原生 BeginTabItem 參數完全相容！
+	bool BeginTabItem(const char* label, bool* p_open = nullptr, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None,
+		ImTextureID icon = 0, const ImVec2& iconSize = ImVec2(0.0f, 0.0f));
+
+	// 結束當前分頁項目（保持與原生 ImGui::EndTabItem() 呼叫對稱）
+	void EndTabItem();
+
+	// 結束自訂分頁列並畫出底部分隔線
+	void EndTabBar();
+}
 
 #endif
